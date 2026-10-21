@@ -24,6 +24,7 @@ import (
 	"github.com/rizkyr99/sagamart/services/inventory/internal/domain"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/expiry"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/grpcapi"
+	"github.com/rizkyr99/sagamart/services/inventory/internal/outbox"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/server"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/store"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/telemetry"
@@ -36,6 +37,9 @@ const serviceName = "inventory"
 
 // expiryBatch is how many due reservations the worker expires before checking for more (RFC-0001 §4.4).
 const expiryBatch = 100
+
+// outboxBatch is how many events the relay publishes per transaction (ADR-0006).
+const outboxBatch = 100
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
@@ -127,6 +131,17 @@ func run(ctx context.Context) error {
 	g.Go(func() error {
 		log.Info("expiry worker started", "interval", cfg.ExpiryInterval.String())
 		expiry.New(reservations, cfg.ExpiryInterval, expiryBatch, log).Run(gctx)
+		return nil
+	})
+	// The relay connects lazily: commands keep working while the broker is down, and events wait in the outbox.
+	publisher, err := outbox.NewKafkaPublisher(cfg.KafkaBrokers, 10*time.Second)
+	if err != nil {
+		return err
+	}
+	defer publisher.Close()
+	g.Go(func() error {
+		log.Info("outbox relay started", "topic", cfg.EventsTopic, "interval", cfg.OutboxInterval.String())
+		outbox.New(reservations, publisher, cfg.EventsTopic, cfg.OutboxInterval, outboxBatch, log).Run(gctx)
 		return nil
 	})
 	health.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)

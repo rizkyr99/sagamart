@@ -15,4 +15,4 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - CI gates for contracts, docs and secret scanning; issue and pull request templates.
 - Inventory contract accepted (RFC-0001): `SetStockLevel`, domain error reasons with `InsufficientStockDetail`, and the `inventory.reservation.expired/v1` and `inventory.stock.adjusted/v1` event schemas with examples.
 - Generated Go code for the contracts, committed under `contracts/gen/go` and checked for staleness in CI.
-- Inventory service (see `services/inventory/CHANGELOG.md`): domain rules, Postgres reservation store, gRPC API and reservation expiry worker; `make demo` runs it with the infrastructure.
+- Inventory service (see `services/inventory/CHANGELOG.md`): domain rules, Postgres reservation store, gRPC API, reservation expiry worker and outbox relay to Redpanda; `make demo` runs it with the infrastructure.

@@ -6,10 +6,14 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/rizkyr99/sagamart/services/inventory/internal/domain"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/events"
 )
+
+var tracer = otel.Tracer("github.com/rizkyr99/sagamart/services/inventory/internal/store")
 
 // ExpireDue expires up to max active reservations whose TTL has passed, oldest first, returning how many it
 // expired. Each one is its own transaction: lock the reservation (skipping any another worker or command holds),
@@ -21,6 +25,8 @@ func (s *Store) ExpireDue(ctx context.Context, max int) (int, error) {
 	for expired < max {
 		var found bool
 		var lagSeconds float64
+		// The worker has no incoming request, so each expiry starts its own trace; the event carries it onward.
+		ctx, span := tracer.Start(ctx, "inventory.ExpireReservation")
 		err := s.inTx(ctx, func(tx pgx.Tx) error {
 			found = false // the callback may run again after a deadlock or serialisation failure
 
@@ -64,9 +70,14 @@ func (s *Store) ExpireDue(ctx context.Context, max int) (int, error) {
 				return err
 			}
 			lagSeconds = row.dbNow.Sub(row.ExpiresAt).Seconds()
+			span.SetAttributes(attribute.String("order_id", orderID), attribute.String("reservation_id", row.ID))
 			found = true
 			return nil
 		})
+		if err != nil {
+			span.RecordError(err)
+		}
+		span.End()
 		if err != nil {
 			return expired, s.metrics.observe(ctx, err)
 		}
