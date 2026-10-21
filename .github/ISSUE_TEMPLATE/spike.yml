@@ -1,0 +1,25 @@
+name: Spike
+description: Time-boxed investigation; the code is thrown away
+labels: [spike]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question to answer
+    validations:
+      required: true
+  - type: input
+    id: timebox
+    attributes:
+      label: Time box
+      description: Maximum 4 hours
+      placeholder: 3 h
+    validations:
+      required: true
+  - type: dropdown
+    id: output
+    attributes:
+      label: Expected output
+      options: ["ADR", "Notes in this issue", "Follow-up issue"]
+    validations:
+      required: true
