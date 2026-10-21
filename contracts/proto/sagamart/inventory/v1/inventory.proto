@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package sagamart.inventory.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/rizkyr99/sagamart/contracts/gen/go/sagamart/inventory/v1;inventoryv1";
+option java_multiple_files = true;
+option java_package = "dev.sagamart.contracts.inventory.v1";
+
+// InventoryService holds stock for checkout. It is called by the Order saga orchestrator.
+// Every RPC is idempotent on order_id: repeating a call returns the original result.
+// Draft: semantics are finalised in RFC-0001 (inventory reservation).
+service InventoryService {
+  // ReserveStock holds stock for every line of an order, all or nothing, until the TTL passes.
+  // Errors: FAILED_PRECONDITION (code INSUFFICIENT_STOCK) when any SKU lacks available stock.
+  rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
+
+  // CommitReservation turns a reservation into a sale.
+  // Errors: NOT_FOUND (code RESERVATION_NOT_FOUND) when it expired or was released.
+  rpc CommitReservation(CommitReservationRequest) returns (CommitReservationResponse);
+
+  // ReleaseReservation returns reserved stock. Releasing an already released or expired reservation succeeds.
+  rpc ReleaseReservation(ReleaseReservationRequest) returns (ReleaseReservationResponse);
+
+  // GetStockLevels returns availability for display (product pages, cart).
+  rpc GetStockLevels(GetStockLevelsRequest) returns (GetStockLevelsResponse);
+}
+
+message ReservationLine {
+  string sku = 1;
+  int32 quantity = 2;
+}
+
+message ReserveStockRequest {
+  // UUIDv7 of the order; also the idempotency key.
+  string order_id = 1;
+  repeated ReservationLine lines = 2;
+  // Defaults to 10 minutes when unset (PRD FR-06).
+  google.protobuf.Duration ttl = 3;
+}
+
+message ReserveStockResponse {
+  string reservation_id = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message CommitReservationRequest {
+  string order_id = 1;
+}
+
+message CommitReservationResponse {
+  google.protobuf.Timestamp committed_at = 1;
+}
+
+message ReleaseReservationRequest {
+  string order_id = 1;
+  ReleaseReason reason = 2;
+}
+
+enum ReleaseReason {
+  RELEASE_REASON_UNSPECIFIED = 0;
+  RELEASE_REASON_PAYMENT_FAILED = 1;
+  RELEASE_REASON_PAYMENT_TIMEOUT = 2;
+  RELEASE_REASON_ORDER_CANCELLED = 3;
+}
+
+message ReleaseReservationResponse {
+  ReservationStatus status = 1;
+}
+
+enum ReservationStatus {
+  RESERVATION_STATUS_UNSPECIFIED = 0;
+  RESERVATION_STATUS_ACTIVE = 1;
+  RESERVATION_STATUS_COMMITTED = 2;
+  RESERVATION_STATUS_RELEASED = 3;
+  RESERVATION_STATUS_EXPIRED = 4;
+}
+
+message GetStockLevelsRequest {
+  repeated string skus = 1;
+}
+
+message StockLevel {
+  string sku = 1;
+  int64 on_hand = 2;
+  int64 reserved = 3;
+  // available = on_hand - reserved, never negative.
+  int64 available = 4;
+}
+
+message GetStockLevelsResponse {
+  repeated StockLevel levels = 1;
+}
