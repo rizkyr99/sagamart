@@ -106,7 +106,7 @@ Every change goes through a pull request, even working alone.
 
 - **Self-review after a break:** review your own PR in a later session, not right after writing it. Fresh eyes catch more.
 - **Use the PR template checklist** (see [appendix A](#appendix-a-pull-request-template)).
-- **Get outside eyes on the important ones:** ask a peer or mentor to review each RFC and the saga implementation. One or two external reviews are worth more than any checklist.
+- **Get outside eyes on the important ones when available:** if a peer or mentor can review, ask them to look at RFCs and the saga implementation; one or two external reviews are worth more than any checklist. Without one, an RFC can be accepted after the self-review break plus the automated review on the PR (CodeRabbit). Record which kind of review it had in the RFC's decision log.
 - **Branch protection on `main`:** pull request required, all required CI checks passing, squash merge for a linear history.
 
 ## 7. Quality gates in CI
