@@ -1,0 +1,19 @@
+{
+  "id": "0199f2a1-5c3e-7d41-8b6a-2f1e9c7d4a10",
+  "type": "inventory.reservation.expired",
+  "source": "inventory",
+  "specversion": "1.0",
+  "time": "2026-10-21T03:10:00.412Z",
+  "subject": "0199f29e-8a10-7b2c-9d3e-4f5a6b7c8d9e",
+  "dataschema": "inventory.reservation.expired/v1",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "data": {
+    "orderId": "0199f29e-8a10-7b2c-9d3e-4f5a6b7c8d9e",
+    "reservationId": "0199f29e-8b22-7c31-a4d5-6e7f8091a2b3",
+    "lines": [
+      { "sku": "KAOS-001-M", "quantity": 2 },
+      { "sku": "BAJU-001-L", "quantity": 1 }
+    ],
+    "expiredAt": "2026-10-21T03:10:00.398Z"
+  }
+}

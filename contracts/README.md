@@ -6,17 +6,22 @@ The source of truth for every interface between Sagamart components. Code is gen
 |---|---|---|
 | [`proto/`](proto/) | gRPC services for internal commands (`sagamart.<context>.v<n>`) | `make contracts-lint`, `make contracts-breaking` (buf) |
 | [`openapi/`](openapi/) | Public gateway API and internal REST specs | OpenAPI validation (from Stage 1) |
-| [`events/`](events/) | Event envelope and one JSON Schema per event type and version | Schema diff (from Stage 1) |
+| [`events/`](events/) | Event envelope, one JSON Schema per event type and version, and an example of each | `make contracts-events` |
+| [`gen/go/`](gen/go/) | Generated Go code (module `github.com/rizkyr99/sagamart/contracts/gen/go`), committed | `make contracts-generate`; CI fails if it is stale |
 
 ## Current contracts
 
 | Contract | Status | Finalised in |
 |---|---|---|
-| `sagamart.inventory.v1.InventoryService` | Draft | RFC-0001 |
+| `sagamart.inventory.v1.InventoryService` | Accepted | [RFC-0001](../docs/rfc/0001-inventory-reservation.md) |
 | `sagamart.payment.v1.PaymentService` | Draft | RFC-0002 |
-| [Event envelope](events/envelope.schema.json) | Accepted (conventions §6) | — |
+| [Event envelope](events/envelope.schema.json) | Accepted | [Conventions §6](../docs/engineering/conventions.md#6-events) |
+| [`inventory.reservation.expired/v1`](events/schemas/inventory.reservation.expired.v1.schema.json) | Accepted | RFC-0001 |
+| [`inventory.stock.adjusted/v1`](events/schemas/inventory.stock.adjusted.v1.schema.json) | Accepted | RFC-0001 |
 
-Event payload schemas live in `events/schemas/<event-type>.v<major>.schema.json` with an example payload next to each, so producers can validate what they emit and consumers can test parsing.
+Each event schema in `events/schemas/<event-type>.v<major>.schema.json` describes the whole event: it extends the envelope and pins `type`, `source`, `dataschema` and the shape of `data`. A matching example lives in `events/examples/<event-type>.v<major>.json`, so producers can validate what they emit and consumers can test parsing.
+
+Go services import generated code from `contracts/gen/go`; Java (Order) generates its own at build time from `proto/`.
 
 ## Rules
 
