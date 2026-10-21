@@ -1,0 +1,32 @@
+# Environment
+.env
+!.env.example
+
+# Editors and OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+.DS_Store
+
+# Node
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Go
+/services/*/bin/
+*.test
+*.out
+
+# Java
+target/
+build/
+.gradle/
+*.class
+
+# Test and load-test output
+playwright-report/
+test-results/
+deploy/k6/results/
