@@ -9,23 +9,42 @@ option go_package = "github.com/rizkyr99/sagamart/contracts/gen/go/sagamart/inve
 option java_multiple_files = true;
 option java_package = "dev.sagamart.contracts.inventory.v1";
 
-// InventoryService holds stock for checkout. It is called by the Order saga orchestrator.
-// Every RPC is idempotent on order_id: repeating a call returns the original result.
-// Draft: semantics are finalised in RFC-0001 (inventory reservation).
+// InventoryService holds stock for checkout. Semantics are defined in RFC-0001 (inventory reservation).
+//
+// Callers: the Order saga orchestrator (reservations) and the gateway (stock levels, admin stock changes).
+// Reservation RPCs are idempotent on order_id: repeating a call returns the original result.
+//
+// Domain errors carry a google.rpc.ErrorInfo detail with domain "inventory.sagamart.dev" and one of these reasons:
+//   INSUFFICIENT_STOCK     FAILED_PRECONDITION, plus an InsufficientStockDetail
+//   RESERVATION_NOT_FOUND  NOT_FOUND
+//   RESERVATION_COMMITTED  FAILED_PRECONDITION
+//   RESERVATION_CONFLICT   ALREADY_EXISTS
+//   STOCK_BELOW_RESERVED   FAILED_PRECONDITION
+//   VERSION_CONFLICT       ABORTED
+// Malformed requests return INVALID_ARGUMENT with a google.rpc.BadRequest detail.
 service InventoryService {
   // ReserveStock holds stock for every line of an order, all or nothing, until the TTL passes.
-  // Errors: FAILED_PRECONDITION (code INSUFFICIENT_STOCK) when any SKU lacks available stock.
+  // Validation: 1-50 lines, unique SKUs, quantity 1..INVENTORY_MAX_LINE_QUANTITY (default 100), TTL 1-30 minutes.
+  // Errors: INSUFFICIENT_STOCK when any line doesn't fit available stock (nothing is reserved);
+  // RESERVATION_CONFLICT when the order already has a reservation with different lines.
   rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
 
-  // CommitReservation turns a reservation into a sale.
-  // Errors: NOT_FOUND (code RESERVATION_NOT_FOUND) when it expired or was released.
+  // CommitReservation turns an active reservation into a sale. Repeating it returns the original committed_at.
+  // Errors: RESERVATION_NOT_FOUND when the reservation is unknown, released, expired, or at or past expires_at.
   rpc CommitReservation(CommitReservationRequest) returns (CommitReservationResponse);
 
-  // ReleaseReservation returns reserved stock. Releasing an already released or expired reservation succeeds.
+  // ReleaseReservation returns reserved stock. Releasing a released or expired reservation succeeds unchanged.
+  // Errors: RESERVATION_NOT_FOUND when unknown; RESERVATION_COMMITTED when it was already committed.
   rpc ReleaseReservation(ReleaseReservationRequest) returns (ReleaseReservationResponse);
 
-  // GetStockLevels returns availability for display (product pages, cart).
+  // GetStockLevels returns availability for display (product pages, cart). Up to 100 SKUs per call.
+  // Unknown SKUs are omitted from the response.
   rpc GetStockLevels(GetStockLevelsRequest) returns (GetStockLevelsResponse);
+
+  // SetStockLevel sets on_hand for a SKU (admin only, PRD FR-11), creating the SKU when expected_version is 0.
+  // Errors: VERSION_CONFLICT when expected_version doesn't match the current version;
+  // STOCK_BELOW_RESERVED when on_hand would drop below the reserved quantity.
+  rpc SetStockLevel(SetStockLevelRequest) returns (SetStockLevelResponse);
 }
 
 message ReservationLine {
@@ -67,6 +86,7 @@ enum ReleaseReason {
 }
 
 message ReleaseReservationResponse {
+  // RELEASED, or EXPIRED when the reservation had already expired.
   ReservationStatus status = 1;
 }
 
@@ -88,8 +108,34 @@ message StockLevel {
   int64 reserved = 3;
   // available = on_hand - reserved, never negative.
   int64 available = 4;
+  // Increments on every change; pass it as SetStockLevelRequest.expected_version.
+  int64 version = 5;
 }
 
 message GetStockLevelsResponse {
   repeated StockLevel levels = 1;
+}
+
+message SetStockLevelRequest {
+  string sku = 1;
+  // Units physically in stock and not yet sold. Must be >= 0 and >= the reserved quantity.
+  int64 on_hand = 2;
+  // Current version from StockLevel.version, or 0 to create a SKU that doesn't exist yet.
+  int64 expected_version = 3;
+}
+
+message SetStockLevelResponse {
+  StockLevel level = 1;
+}
+
+// InsufficientStockDetail is attached to INSUFFICIENT_STOCK errors, one entry per line that didn't fit.
+message InsufficientStockDetail {
+  repeated StockShortfall shortfalls = 1;
+}
+
+message StockShortfall {
+  string sku = 1;
+  int32 requested = 2;
+  // 0 for SKUs Inventory doesn't know.
+  int64 available = 3;
 }
