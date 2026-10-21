@@ -22,6 +22,7 @@ import (
 
 	"github.com/rizkyr99/sagamart/services/inventory/internal/config"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/domain"
+	"github.com/rizkyr99/sagamart/services/inventory/internal/expiry"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/grpcapi"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/server"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/store"
@@ -32,6 +33,9 @@ import (
 var version = "dev"
 
 const serviceName = "inventory"
+
+// expiryBatch is how many due reservations the worker expires before checking for more (RFC-0001 §4.4).
+const expiryBatch = 100
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
@@ -93,9 +97,10 @@ func run(ctx context.Context) error {
 	}
 	defer pool.Close()
 
+	reservations := store.New(pool)
 	grpcSrv, health := server.NewGRPCServer(cfg.Env)
 	inventoryv1.RegisterInventoryServiceServer(grpcSrv,
-		grpcapi.New(store.New(pool), domain.NewLimits(cfg.MaxLineQuantity), log))
+		grpcapi.New(reservations, domain.NewLimits(cfg.MaxLineQuantity), log))
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.NewHTTPHandler(pool),
@@ -117,6 +122,11 @@ func run(ctx context.Context) error {
 		if err := httpSrv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
+		return nil
+	})
+	g.Go(func() error {
+		log.Info("expiry worker started", "interval", cfg.ExpiryInterval.String())
+		expiry.New(reservations, cfg.ExpiryInterval, expiryBatch, log).Run(gctx)
 		return nil
 	})
 	health.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)

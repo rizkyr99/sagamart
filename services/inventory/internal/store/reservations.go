@@ -43,7 +43,7 @@ func New(pool *pgxpool.Pool, opts ...Option) *Store {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return &Store{pool: pool, metrics: newStoreMetrics(o.meterProvider)}
+	return &Store{pool: pool, metrics: newStoreMetrics(o.meterProvider, pool)}
 }
 
 // lineDidNotFit aborts a reservation transaction at the first line without enough available stock.

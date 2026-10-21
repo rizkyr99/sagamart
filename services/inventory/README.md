@@ -2,7 +2,7 @@
 
 Go service that knows what can be sold and never sells more than that. It holds stock levels per SKU and time-limited reservations for checkout. Design: [RFC-0001](../../docs/rfc/0001-inventory-reservation.md). Contract: [`sagamart.inventory.v1`](../../contracts/proto/sagamart/inventory/v1/inventory.proto).
 
-> **Status:** the gRPC API is live. The expiry worker and outbox relay (#10) follow; `SetStockLevel` is not yet restricted to admins (#17).
+> **Status:** the gRPC API and expiry worker are live. Events are written to the outbox; the relay that publishes them to Redpanda follows (#10). `SetStockLevel` is not yet restricted to admins (#17).
 
 ## Run it
 
@@ -35,8 +35,10 @@ Errors follow the contract: a status code plus a `google.rpc.ErrorInfo` (domain 
 | Metric | Labels |
 |---|---|
 | `sagamart_inventory_reservations_total`, `sagamart_inventory_reservation_duration_seconds` | `result`: `reserved`, `insufficient_stock`, `conflict`, `invalid`, `error` |
-| `sagamart_inventory_reservation_transitions_total` | `to`: `COMMITTED`, `RELEASED` (repeats are not counted) |
+| `sagamart_inventory_reservation_transitions_total` | `to`: `COMMITTED`, `RELEASED`, `EXPIRED` (repeats are not counted) |
 | `sagamart_inventory_constraint_violations_total` | `constraint`; above zero means a bug |
+| `sagamart_inventory_expiry_lag_seconds` | Time from `expires_at` to the worker expiring it; FR-06 allows 30 s |
+| `sagamart_inventory_active_reservations` | Reservations holding stock now |
 | `rpc_server_call_duration_seconds` (otelgrpc) | per method and status |
 
 Every gRPC call is a span with a child span per database statement (otelpgx).
@@ -55,6 +57,7 @@ Environment variables, validated at startup; every problem is reported at once a
 | `INVENTORY_MIGRATE_ON_START` | `true` in local/test, else `false` | Deployments run migrations as a separate step |
 | `INVENTORY_MAX_LINE_QUANTITY` | `100` | Per-line sanity limit (RFC-0001 decision log) |
 | `INVENTORY_SHUTDOWN_TIMEOUT` | `15s` | Time to drain in-flight calls on SIGTERM |
+| `INVENTORY_EXPIRY_INTERVAL` | `5s` | How often the expiry worker looks for due reservations; at most `25s`, so expired stock is back within FR-06's 30 s |
 | `INVENTORY_VERSION` | build version | Overrides the version in logs and telemetry |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | empty | e.g. `http://localhost:4317`; empty disables trace export, but logs still carry trace IDs |
 
@@ -68,6 +71,7 @@ Environment variables, validated at startup; every problem is reported at once a
 | `internal/telemetry` | Logger (conventions §7), OpenTelemetry tracing and metrics |
 | `internal/store` | Postgres pool, migrations and the reservation store: each command is one transaction using conditional updates and a fixed lock order |
 | `internal/events` | Event envelopes written to the outbox; `schematest` validates them against `contracts/events` |
+| `internal/expiry` | Expiry worker: drains due reservations every interval |
 | `internal/grpcapi` | `InventoryService`: request mapping, error mapping to status codes and details, reservation metrics |
 | `internal/server` | HTTP probes and metrics, gRPC server setup |
 | `migrations` | Forward-only SQL migrations, embedded in the binary |
@@ -90,3 +94,4 @@ Key suites:
   - Retries of every command are idempotent, including 20 concurrent retries of one order.
   - Strict expiry on commit; admin stock changes with optimistic versioning; exactly one schema-valid `inventory.stock.adjusted` outbox event per successful change.
   - The `stock_never_oversold` constraint rejects every form of oversell.
+  - Expiry: due reservations release their stock and write one schema-valid `inventory.reservation.expired`; other reservations are untouched; expired ones are final; four concurrent workers expire 200 reservations exactly once each.
