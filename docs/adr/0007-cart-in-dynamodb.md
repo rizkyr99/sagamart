@@ -13,14 +13,17 @@ Carts are high-write, short-lived, accessed almost entirely by a single key (car
 ## Options considered
 
 ### Option A — Postgres
+
 - **Pros:** one less technology; strong consistency.
 - **Cons:** TTL needs a cleanup job; write-heavy ephemeral data bloats tables and indexes.
 
 ### Option B — Redis
+
 - **Pros:** very fast, native TTL.
 - **Cons:** durability depends on persistence settings; losing carts on restart hurts conversion; memory cost grows with carts.
 
 ### Option C — DynamoDB
+
 - **Pros:** key-value access pattern fits exactly; native TTL; durable; scales horizontally with predictable latency; pay-per-request in the cloud.
 - **Cons:** another technology; query flexibility is limited to designed access patterns; local development uses DynamoDB Local, which differs slightly from the managed service.
 

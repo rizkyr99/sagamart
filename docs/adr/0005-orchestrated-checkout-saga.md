@@ -14,16 +14,21 @@ Checkout spans Order, Inventory and Payment, each with its own database. A distr
 ## Options considered
 
 ### Option A — Choreography
+
 Each service reacts to the previous service's event (OrderCreated → Inventory reserves → StockReserved → Payment charges ...).
+
 - **Pros:** no central coordinator; loose coupling.
 - **Cons:** the workflow is implicit and spread across services; hard to see the state of one checkout; compensation logic scattered; cyclic dependencies grow as steps are added.
 
 ### Option B — Orchestration
+
 The Order service runs an explicit state machine that sends commands and reacts to replies.
+
 - **Pros:** the whole workflow lives in one place; each checkout's state is queryable (powers the admin saga inspector); timeouts and compensations are explicit and testable.
 - **Cons:** the orchestrator is a central dependency; risk of it accumulating business logic that belongs elsewhere.
 
 ### Option C — Workflow engine (Temporal, Camunda)
+
 - **Pros:** durable execution, retries and timers handled by the engine.
 - **Cons:** another heavy component; hides the mechanics the project is meant to demonstrate.
 

@@ -19,18 +19,22 @@ Services exchange domain events (order lifecycle, payments, catalog changes). Re
 ## Options considered
 
 ### Option A — RabbitMQ
+
 - **Pros:** mature, flexible routing, simple per-message acknowledgement.
 - **Cons:** queue-based, not a replayable log; ordering per key needs extra design; replays require re-publishing.
 
 ### Option B — NATS JetStream
+
 - **Pros:** very light, simple, has persistence and replay.
 - **Cons:** less common in large ecommerce stacks; smaller ecosystem of tooling and connectors.
 
 ### Option C — Apache Kafka
+
 - **Pros:** industry standard log; partitions, consumer groups, replay.
 - **Cons:** heavier to run locally (JVM, more memory).
 
 ### Option D — Redpanda
+
 - **Pros:** Kafka-API compatible (same clients, same concepts), single binary, low memory, fast startup, built-in schema registry and console.
 - **Cons:** smaller community than Kafka; some Kafka ecosystem tools behave slightly differently.
 

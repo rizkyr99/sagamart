@@ -10,7 +10,7 @@ Sagamart is a polyglot, event-driven ecommerce platform (NestJS, Java/Spring Boo
 | [`architecture/`](architecture/) | System design, context map, diagrams | Written |
 | [`adr/`](adr/) | Architecture Decision Records (one decision per file) | Ongoing |
 | [`rfc/`](rfc/) | Design docs written before each significant piece of work | Before each stage |
-| [`contracts/`](contracts/) | OpenAPI, protobuf, AsyncAPI event schemas | From the Foundation stage |
+| [`../contracts/`](../contracts/) | OpenAPI, protobuf, AsyncAPI event schemas (repo root) | Started |
 | [`engineering/`](engineering/) | Development process, conventions, testing strategy | Written |
 | [`quality/`](quality/) | NFRs, SLOs, threat model, capacity plan | Scale release onward |
 | [`operations/`](operations/) | Runbooks, postmortems, backup and recovery | From the MVP (first chaos postmortems) |

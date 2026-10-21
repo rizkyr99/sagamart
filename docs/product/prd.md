@@ -56,32 +56,38 @@ Sagamart should demonstrate a design that prevents each of these, and prove it w
 ## 5. User journeys
 
 ### J1 — Browse and search
+
 1. Buyer opens the storefront and sees categories and featured products.
 2. Buyer searches by keyword and filters by category and price.
 3. Buyer opens a product page with price, description, images and stock status.
 
 ### J2 — Cart
+
 1. Buyer adds items to the cart as a guest or signed-in user.
 2. Cart persists for 7 days; a guest cart merges into the user's cart on sign-in.
 3. Cart shows current price and availability, and warns if either changed.
 
 ### J3 — Checkout and payment
+
 1. Buyer enters shipping address and selects a (mock) payment method.
 2. System reserves stock, creates the order, and requests payment.
 3. Buyer completes the (mock) payment.
 4. On success the order is confirmed; on failure or timeout, stock is released and the order is cancelled.
 
 ### J4 — Order tracking
+
 1. Buyer sees order history and the status of each order.
 2. Status updates appear live without refreshing (pending → paid → confirmed → shipped → delivered).
 
 ### J5 — Administration
+
 1. Admin creates and edits products and stock levels.
 2. Admin views orders and their full saga history step by step.
 3. Admin marks confirmed orders as shipped, then delivered.
 4. Admin views dead-lettered events and replays them after a fix.
 
 ### J6 — Flash sale
+
 1. Admin sets a limited stock level for a product (e.g. 100 units).
 2. Thousands of buyers attempt to buy at once.
 3. Exactly 100 units are sold; everyone else gets a clear "sold out" response quickly.
@@ -114,17 +120,20 @@ Sagamart should demonstrate a design that prevents each of these, and prove it w
 These are verified by integration tests, the invariant checker, and the load and chaos tests in the [testing strategy](../engineering/testing-strategy.md).
 
 **FR-06 — Stock reservation**
+
 - A reservation succeeds only if available stock ≥ requested quantity; otherwise it fails with `INSUFFICIENT_STOCK`.
 - Under any number of concurrent requests, available stock never goes below zero.
 - An expired reservation is released within 30 seconds of its TTL, even if the Order service is down.
 - Releasing the same reservation twice has the same effect as releasing it once.
 
 **FR-07 — Idempotent payments**
+
 - The same `Idempotency-Key` retried 10 times creates exactly one payment intent and returns the original response each time.
 - The same provider webhook delivered 3 times results in exactly one capture and one set of ledger entries.
 - Ledger debits always equal ledger credits.
 
 **FR-08 — Automatic rollback**
+
 - The saga's payment deadline (default 8 minutes) is shorter than the reservation TTL (10 minutes), so the saga cancels before Inventory's expiry acts as the safety net.
 - On payment failure or deadline expiry, the order reaches `CANCELLED` and its stock is released within 5 seconds (p95).
 - If the Order service is killed mid-checkout, every affected order reaches a terminal state within 60 seconds of restart, with no leaked reservations.

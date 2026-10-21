@@ -10,7 +10,7 @@ These conventions apply to every service, whatever its language. Their purpose i
 
 ## 1. Repository layout
 
-```
+```text
 sagamart/
 ├── .github/
 │   ├── ISSUE_TEMPLATE/       # feature, bug, chore templates

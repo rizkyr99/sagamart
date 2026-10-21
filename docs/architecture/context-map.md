@@ -36,12 +36,14 @@ flowchart LR
 ## 2. Context definitions
 
 ### Catalog
+
 - **Purpose:** what we sell and for how much.
 - **Owns:** products, variants (SKUs), categories, prices, images.
 - **Key terms:** *Product* (a sellable item), *SKU* (a specific variant with its own stock), *List price*.
 - **Service:** Catalog + Cart (NestJS).
 
 ### Cart
+
 - **Purpose:** what a buyer intends to buy.
 - **Owns:** carts and cart lines.
 - **Key terms:** *Cart* (per guest token or user ID, 7-day TTL), *Cart line* (SKU + quantity + price seen).
@@ -49,6 +51,7 @@ flowchart LR
 - **Service:** Catalog + Cart (NestJS). Separate context, same deployable, separate tables/store.
 
 ### Ordering
+
 - **Purpose:** turn intent into a committed purchase, and coordinate checkout.
 - **Owns:** orders, order lines, saga instances and their step history.
 - **Key terms:** *Order* (immutable lines once placed), *Order status*, *Checkout saga*.
@@ -57,28 +60,33 @@ flowchart LR
 - **Service:** Order (Java).
 
 ### Payments
+
 - **Purpose:** take money exactly once and account for it.
 - **Owns:** payment intents, provider transactions, ledger entries.
 - **Key terms:** *Payment intent* (one per order; idempotency key = order ID), *Ledger entry* (double-entry, append-only), *Reconciliation*.
 - **Service:** Payment (Go).
 
 ### Inventory
+
 - **Purpose:** know what can be sold and never sell more than that.
 - **Owns:** stock levels per SKU and reservations.
 - **Key terms:** *On hand*, *Reserved*, *Available = on hand − reserved*, *Reservation* (temporary hold with TTL), *Commit* (reservation becomes a sale).
 - **Service:** Inventory (Go).
 
 ### Search
+
 - **Purpose:** find products quickly.
 - **Owns:** the search index (a read model; rebuildable from Catalog events).
 - **Service:** Event workers (Go).
 
 ### Notifications
+
 - **Purpose:** tell buyers what happened.
 - **Owns:** notification log, delivery attempts.
 - **Service:** Event workers (Go).
 
 ### Identity (external)
+
 - Provided by Casdoor or Keycloak via OIDC. Sagamart conforms to its user ID and role claims.
 
 ## 3. Relationships
