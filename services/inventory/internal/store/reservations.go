@@ -21,11 +21,12 @@ import (
 // concurrency comes from atomic conditional updates and row locks taken in a fixed order (RFC-0001 §4.6):
 // the reservation row first, then stock rows in ascending SKU order.
 type Store struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	metrics storeMetrics
 }
 
 // New returns a Store using pool.
-func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool, metrics: newStoreMetrics()} }
 
 // lineDidNotFit aborts a reservation transaction at the first line without enough available stock.
 type lineDidNotFit struct{ line domain.Line }
@@ -100,6 +101,7 @@ func (s *Store) Reserve(ctx context.Context, req domain.ReserveRequest) (domain.
 		}
 		return nil
 	})
+	err = s.metrics.observe(ctx, err)
 
 	var notFit lineDidNotFit
 	if errors.As(err, &notFit) {
@@ -150,10 +152,10 @@ func (s *Store) Commit(ctx context.Context, orderID string) (time.Time, error) {
 			committedAt = *row.finalizedAt
 			return nil
 		}
-		committedAt, err = settle(ctx, tx, row.Reservation, out)
+		committedAt, err = s.settle(ctx, tx, row.Reservation, out)
 		return err
 	})
-	return committedAt, err
+	return committedAt, s.metrics.observe(ctx, err)
 }
 
 // Release returns the order's reserved units and reports the final status: RELEASED, or EXPIRED when the
@@ -171,15 +173,15 @@ func (s *Store) Release(ctx context.Context, orderID string) (domain.Status, err
 		}
 		status = out.Status
 		if out.Changed {
-			_, err = settle(ctx, tx, row.Reservation, out)
+			_, err = s.settle(ctx, tx, row.Reservation, out)
 		}
 		return err
 	})
-	return status, err
+	return status, s.metrics.observe(ctx, err)
 }
 
 // settle applies a transition: each line's stock operation in SKU order, then the reservation's new status.
-func settle(ctx context.Context, tx pgx.Tx, res domain.Reservation, out domain.Outcome) (time.Time, error) {
+func (s *Store) settle(ctx context.Context, tx pgx.Tx, res domain.Reservation, out domain.Outcome) (time.Time, error) {
 	var query string
 	switch out.StockOp {
 	case domain.StockOpCommit:
@@ -210,6 +212,7 @@ func settle(ctx context.Context, tx pgx.Tx, res domain.Reservation, out domain.O
 		res.ID, string(out.Status)).Scan(&finalizedAt); err != nil {
 		return time.Time{}, fmt.Errorf("finalize reservation: %w", err)
 	}
+	s.metrics.transitioned(ctx, out.Status)
 	return finalizedAt, nil
 }
 
@@ -309,7 +312,7 @@ func (s *Store) SetStock(ctx context.Context, sku string, onHand, expectedVersio
 		})
 	})
 	if err != nil {
-		return domain.StockLevel{}, err
+		return domain.StockLevel{}, s.metrics.observe(ctx, err)
 	}
 	return next, nil
 }

@@ -3,7 +3,6 @@ package grpcapi_test
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net"
 	"testing"
@@ -71,7 +70,7 @@ func client(t *testing.T, store grpcapi.Store) inventoryv1.InventoryServiceClien
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
-	inventoryv1.RegisterInventoryServiceServer(srv, grpcapi.New(store, domain.NewLimits(100), slog.New(slog.NewTextHandler(io.Discard, nil))))
+	inventoryv1.RegisterInventoryServiceServer(srv, grpcapi.New(store, domain.NewLimits(100), slog.New(slog.DiscardHandler)))
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 
