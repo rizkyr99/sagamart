@@ -46,7 +46,7 @@ func Validate(t testing.TB, eventType string, payload []byte) {
 
 func load(t testing.TB, path string) any {
 	t.Helper()
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // G304: test-only; path is derived from this source file's location
 	if err != nil {
 		t.Fatalf("open schema: %v", err)
 	}

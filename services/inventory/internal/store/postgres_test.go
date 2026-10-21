@@ -40,7 +40,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("start postgres: %v", err)
 	}
 	code := func() int {
-		defer func() { _ = ctr.Terminate(context.Background()) }()
+		defer func() { _ = ctr.Terminate(ctx) }()
 		if dbURL, err = ctr.ConnectionString(ctx, "sslmode=disable"); err != nil {
 			log.Printf("connection string: %v", err)
 			return 1

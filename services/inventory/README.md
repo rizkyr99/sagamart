@@ -2,7 +2,7 @@
 
 Go service that knows what can be sold and never sells more than that. It holds stock levels per SKU and time-limited reservations for checkout. Design: [RFC-0001](../../docs/rfc/0001-inventory-reservation.md). Contract: [`sagamart.inventory.v1`](../../contracts/proto/sagamart/inventory/v1/inventory.proto).
 
-> **Status:** skeleton plus domain rules. The gRPC API, expiry worker and outbox relay land in issues #9 and #10.
+> **Status:** domain rules and the Postgres store are done. The gRPC API (#9), expiry worker and outbox relay (#10) follow.
 
 ## Run it
 
@@ -49,7 +49,8 @@ Environment variables, validated at startup; every problem is reported at once a
 | `internal/config` | Environment configuration |
 | `internal/domain` | Pure reservation rules: request validation, the status transition table, stock arithmetic. No I/O |
 | `internal/telemetry` | Logger (conventions §7), OpenTelemetry tracing and metrics |
-| `internal/store` | Postgres pool and migrations; the reservation store follows |
+| `internal/store` | Postgres pool, migrations and the reservation store: each command is one transaction using conditional updates and a fixed lock order |
+| `internal/events` | Event envelopes written to the outbox; `schematest` validates them against `contracts/events` |
 | `internal/server` | HTTP probes and metrics, gRPC server setup |
 | `migrations` | Forward-only SQL migrations, embedded in the binary |
 
@@ -64,4 +65,9 @@ make lint
 Key suites:
 
 - `internal/domain`: the reservation transition table (`TestDecide`, one row per status, command and timing) and `TestInventoryNeverOversells`, a property-based test (`rapid`). It drives an in-memory model built from the domain rules through random reserve, commit, release, expire, stock-change and clock steps, and checks after every step that nothing is oversold, `reserved` matches the active reservations, and stock is conserved. Run it harder with `go test ./internal/domain -run NeverOversells -rapid.checks=20000`.
-- `internal/store`: migrations are idempotent, and the `stock_never_oversold` constraint rejects every form of oversell.
+- `internal/store` (one shared Testcontainers Postgres; each test owns its SKUs and order IDs):
+  - `TestConcurrentReservationsNeverOversell`: 1,000 concurrent buyers for 100 units, exactly 100 succeed.
+  - `TestConcurrentMultiLineReservationsDontDeadlock`: 300 overlapping multi-line reservations sent in random line order.
+  - Retries of every command are idempotent, including 20 concurrent retries of one order.
+  - Strict expiry on commit; admin stock changes with optimistic versioning; exactly one schema-valid `inventory.stock.adjusted` outbox event per successful change.
+  - The `stock_never_oversold` constraint rejects every form of oversell.
