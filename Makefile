@@ -73,6 +73,10 @@ contracts-events: ## Compile event schemas and validate every example against it
 		if [ ! -f $$example ]; then echo "missing example for $$name: $$example"; exit 1; fi; \
 		$(AJV) validate -s $$schema -r $(EVENTS)/envelope.schema.json -d $$example; \
 	done
+	@set -e; for example in $(EVENTS)/examples/*.json; do \
+		name=$$(basename $$example .json); \
+		if [ ! -f $(EVENTS)/schemas/$$name.schema.json ]; then echo "example without a schema: $$example"; exit 1; fi; \
+	done
 
 .PHONY: contracts-format
 contracts-format: ## Format protobuf contracts in place
