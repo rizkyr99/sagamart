@@ -22,6 +22,8 @@ make up
 
 `make up` copies `deploy/compose/.env.example` to `deploy/compose/.env` on first run. Edit `.env` to change ports or credentials; it is never committed.
 
+`make up` starts infrastructure only, so you can run the service you're working on from source (`make run` in its folder). `make demo` builds and starts every service as well.
+
 ### Local ports
 
 | Component | Port |
@@ -36,6 +38,7 @@ make up
 | Prometheus | 9090 |
 | Jaeger UI | 16686 |
 | Grafana | 3001 |
+| Inventory — HTTP (probes, metrics) / gRPC | 8110 / 9110 |
 
 ## Workflow
 

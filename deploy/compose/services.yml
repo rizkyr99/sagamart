@@ -1,0 +1,22 @@
+# Sagamart services. Started by `make demo` together with infra.yml; `make up` starts infrastructure only.
+# Each service sits behind the "services" profile so it is never started by accident while you run it from source.
+
+services:
+  inventory:
+    profiles: [services]
+    build:
+      context: ../..
+      dockerfile: services/inventory/Dockerfile
+      args:
+        VERSION: ${SAGAMART_VERSION:-dev}
+    restart: unless-stopped
+    environment:
+      INVENTORY_ENV: local
+      INVENTORY_DB_URL: postgres://${INVENTORY_DB_USER}:${INVENTORY_DB_PASSWORD}@inventory-db:5432/inventory?sslmode=disable
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    ports:
+      - "${INVENTORY_HTTP_PORT:-8110}:8110"
+      - "${INVENTORY_GRPC_PORT:-9110}:9110"
+    depends_on:
+      inventory-db: { condition: service_healthy }
+      otel-collector: { condition: service_started }

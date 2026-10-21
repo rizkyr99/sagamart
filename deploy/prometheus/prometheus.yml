@@ -2,7 +2,7 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
-# Service scrape targets (each exposes /metrics) are added here as services land, one job per service.
+# One job per service; each exposes /metrics on its HTTP port. A service not running shows as a down target.
 scrape_configs:
   - job_name: prometheus
     static_configs:
@@ -12,3 +12,7 @@ scrape_configs:
     metrics_path: /public_metrics
     static_configs:
       - targets: ["redpanda:9644"]
+
+  - job_name: inventory
+    static_configs:
+      - targets: ["inventory:8110"]
