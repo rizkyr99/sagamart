@@ -18,7 +18,11 @@ import (
 	"golang.org/x/sync/errgroup"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	inventoryv1 "github.com/rizkyr99/sagamart/contracts/gen/go/sagamart/inventory/v1"
+
 	"github.com/rizkyr99/sagamart/services/inventory/internal/config"
+	"github.com/rizkyr99/sagamart/services/inventory/internal/domain"
+	"github.com/rizkyr99/sagamart/services/inventory/internal/grpcapi"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/server"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/store"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/telemetry"
@@ -90,6 +94,8 @@ func run(ctx context.Context) error {
 	defer pool.Close()
 
 	grpcSrv, health := server.NewGRPCServer(cfg.Env)
+	inventoryv1.RegisterInventoryServiceServer(grpcSrv,
+		grpcapi.New(store.New(pool), domain.NewLimits(cfg.MaxLineQuantity), log))
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.NewHTTPHandler(pool),

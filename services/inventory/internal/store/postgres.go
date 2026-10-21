@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/exaring/otelpgx"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5" // registers the pgx5:// migrate driver
 	"github.com/golang-migrate/migrate/v4/source/iofs"
@@ -15,9 +16,15 @@ import (
 	"github.com/rizkyr99/sagamart/services/inventory/migrations"
 )
 
-// Connect opens a connection pool and checks that the database answers.
+// Connect opens a connection pool and checks that the database answers. Every query becomes a child span
+// of the caller's trace.
 func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+	cfg, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse database URL: %w", err)
+	}
+	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("open pool: %w", err)
 	}

@@ -182,3 +182,35 @@ func TestCheckRetryReturnsOriginalWhateverItsStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateStockQuery(t *testing.T) {
+	if err := domain.ValidateStockQuery([]string{"KAOS-001", "BAJU-001"}); err != nil {
+		t.Errorf("valid query rejected: %v", err)
+	}
+	hundred := make([]string, 100)
+	for i := range hundred {
+		hundred[i] = "SKU-" + strings.Repeat("A", i%60+1)
+	}
+	if err := domain.ValidateStockQuery(hundred); err != nil {
+		t.Errorf("100 SKUs rejected: %v", err)
+	}
+
+	tests := []struct {
+		name  string
+		skus  []string
+		field string
+	}{
+		{"empty", nil, "skus"},
+		{"more than 100", append(hundred, "ONE-MORE"), "skus"},
+		{"blank SKU", []string{"KAOS-001", ""}, "skus[1]"},
+		{"SKU with spaces", []string{"KAOS 001"}, "skus[0]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var verr *domain.ValidationError
+			if err := domain.ValidateStockQuery(tt.skus); !errors.As(err, &verr) || !hasViolation(verr, tt.field) {
+				t.Errorf("want a violation on %s, got %v", tt.field, err)
+			}
+		})
+	}
+}

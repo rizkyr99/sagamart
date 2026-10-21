@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/rizkyr99/sagamart/services/inventory/internal/domain"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/events"
@@ -21,11 +23,28 @@ import (
 // concurrency comes from atomic conditional updates and row locks taken in a fixed order (RFC-0001 §4.6):
 // the reservation row first, then stock rows in ascending SKU order.
 type Store struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	metrics storeMetrics
+}
+
+// Option configures a Store.
+type Option func(*options)
+
+type options struct{ meterProvider metric.MeterProvider }
+
+// WithMeterProvider records the store's metrics with mp instead of the global provider.
+func WithMeterProvider(mp metric.MeterProvider) Option {
+	return func(o *options) { o.meterProvider = mp }
 }
 
 // New returns a Store using pool.
-func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+func New(pool *pgxpool.Pool, opts ...Option) *Store {
+	o := options{meterProvider: otel.GetMeterProvider()}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return &Store{pool: pool, metrics: newStoreMetrics(o.meterProvider)}
+}
 
 // lineDidNotFit aborts a reservation transaction at the first line without enough available stock.
 type lineDidNotFit struct{ line domain.Line }
@@ -100,6 +119,7 @@ func (s *Store) Reserve(ctx context.Context, req domain.ReserveRequest) (domain.
 		}
 		return nil
 	})
+	err = s.metrics.observe(ctx, err)
 
 	var notFit lineDidNotFit
 	if errors.As(err, &notFit) {
@@ -134,7 +154,9 @@ func (s *Store) shortfalls(ctx context.Context, lines []domain.Line, failed doma
 // Commit sells the order's reserved units and returns when it was committed (the original time on a repeat).
 func (s *Store) Commit(ctx context.Context, orderID string) (time.Time, error) {
 	var committedAt time.Time
+	var changed bool
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
+		changed = false // the callback may run again after a deadlock or serialisation failure
 		row, err := loadReservation(ctx, tx, orderID, true)
 		if err != nil {
 			return err
@@ -150,17 +172,26 @@ func (s *Store) Commit(ctx context.Context, orderID string) (time.Time, error) {
 			committedAt = *row.finalizedAt
 			return nil
 		}
-		committedAt, err = settle(ctx, tx, row.Reservation, out)
+		committedAt, err = s.settle(ctx, tx, row.Reservation, out)
+		changed = err == nil
 		return err
 	})
-	return committedAt, err
+	if err != nil {
+		return time.Time{}, s.metrics.observe(ctx, err)
+	}
+	if changed {
+		s.metrics.transitioned(ctx, domain.StatusCommitted)
+	}
+	return committedAt, nil
 }
 
 // Release returns the order's reserved units and reports the final status: RELEASED, or EXPIRED when the
 // reservation had already expired.
 func (s *Store) Release(ctx context.Context, orderID string) (domain.Status, error) {
 	var status domain.Status
+	var changed bool
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
+		changed = false // the callback may run again after a deadlock or serialisation failure
 		row, err := loadReservation(ctx, tx, orderID, true)
 		if err != nil {
 			return err
@@ -171,15 +202,22 @@ func (s *Store) Release(ctx context.Context, orderID string) (domain.Status, err
 		}
 		status = out.Status
 		if out.Changed {
-			_, err = settle(ctx, tx, row.Reservation, out)
+			_, err = s.settle(ctx, tx, row.Reservation, out)
+			changed = err == nil
 		}
 		return err
 	})
-	return status, err
+	if err != nil {
+		return "", s.metrics.observe(ctx, err)
+	}
+	if changed {
+		s.metrics.transitioned(ctx, status)
+	}
+	return status, nil
 }
 
 // settle applies a transition: each line's stock operation in SKU order, then the reservation's new status.
-func settle(ctx context.Context, tx pgx.Tx, res domain.Reservation, out domain.Outcome) (time.Time, error) {
+func (s *Store) settle(ctx context.Context, tx pgx.Tx, res domain.Reservation, out domain.Outcome) (time.Time, error) {
 	var query string
 	switch out.StockOp {
 	case domain.StockOpCommit:
@@ -309,7 +347,7 @@ func (s *Store) SetStock(ctx context.Context, sku string, onHand, expectedVersio
 		})
 	})
 	if err != nil {
-		return domain.StockLevel{}, err
+		return domain.StockLevel{}, s.metrics.observe(ctx, err)
 	}
 	return next, nil
 }

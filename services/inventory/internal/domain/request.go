@@ -105,6 +105,26 @@ func CheckRetry(existing Reservation, req ReserveRequest) error {
 	return nil
 }
 
+// maxStockQuery bounds GetStockLevels requests (inventory contract).
+const maxStockQuery = 100
+
+// ValidateStockQuery checks a GetStockLevels request: 1 to 100 well-formed SKUs.
+func ValidateStockQuery(skus []string) error {
+	var vs violations
+	switch n := len(skus); {
+	case n == 0:
+		vs.add("skus", "at least one SKU is required")
+	case n > maxStockQuery:
+		vs.add("skus", "at most %d SKUs, got %d", maxStockQuery, n)
+	}
+	for i, sku := range skus {
+		if problem := checkSKU(sku, maxSKULength); problem != "" {
+			vs.add(fmt.Sprintf("skus[%d]", i), "%s", problem)
+		}
+	}
+	return vs.err()
+}
+
 // checkSKU returns a description of what is wrong with sku, or "" when it is valid.
 func checkSKU(sku string, maxLen int) string {
 	switch {
