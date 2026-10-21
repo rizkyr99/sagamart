@@ -27,7 +27,9 @@ jobs:
           fi
       - uses: bufbuild/buf-action@v1
         with:
+          version: 1.45.0 # keep in step with BUF_IMAGE in the Makefile
           input: contracts
+          pr_comment: false
           lint: true
           format: true
           breaking: ${{ github.event_name == 'pull_request' && steps.base.outputs.has_contracts == 'true' }}
