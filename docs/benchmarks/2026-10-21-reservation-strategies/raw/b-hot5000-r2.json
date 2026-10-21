@@ -1,0 +1,92 @@
+{
+    "metrics": {
+        "vus_max": {
+            "min": 2217,
+            "max": 5000,
+            "value": 5000
+        },
+        "reservations_sold_out": {
+            "count": 4900,
+            "rate": 1009.0836482641527
+        },
+        "grpc_req_duration": {
+            "avg": 2789.724203962619,
+            "min": 1.100177,
+            "med": 2675.7786185,
+            "p(90)": 3574.8145797,
+            "p(99)": 4054.53661279,
+            "max": 4180.639031
+        },
+        "grpc_req_duration{status:9}": {
+            "p(99)": 4055.05126763,
+            "max": 4180.639031,
+            "avg": 2824.221375604493,
+            "min": 2179.860923,
+            "med": 2697.2766659999998,
+            "p(90)": 3579.6003072999997,
+            "thresholds": {
+                "p(99)>=0": false
+            }
+        },
+        "reservations_reserved": {
+            "count": 100,
+            "rate": 20.593543842125566,
+            "thresholds": {
+                "count==100": false
+            }
+        },
+        "data_received": {
+            "count": 2190320,
+            "rate": 451064.5094828447
+        },
+        "grpc_req_duration{status:0}": {
+            "med": 1019.4082895,
+            "p(90)": 1810.8942241000002,
+            "p(99)": 2191.6171139199996,
+            "max": 2258.128417,
+            "avg": 1132.507134892157,
+            "min": 1.100177,
+            "thresholds": {
+                "p(99)>=0": false
+            }
+        },
+        "reservations_failed": {
+            "rate": 0,
+            "count": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "data_sent": {
+            "count": 1344438,
+            "rate": 276867.4289601961
+        },
+        "iteration_duration": {
+            "avg": 3542.791081716602,
+            "min": 499.022848,
+            "med": 3663.0805410000003,
+            "p(90)": 4342.427921,
+            "p(99)": 4509.962039610001,
+            "max": 4681.962049
+        },
+        "iterations": {
+            "count": 5000,
+            "rate": 1029.6771921062782
+        },
+        "vus": {
+            "value": 4417,
+            "min": 0,
+            "max": 5000
+        }
+    },
+    "setup_data": {
+        "sku": "HOT-1792575276564"
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {}
+    }
+}

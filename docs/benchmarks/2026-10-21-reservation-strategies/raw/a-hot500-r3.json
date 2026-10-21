@@ -1,0 +1,92 @@
+{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {}
+    },
+    "metrics": {
+        "grpc_req_duration{status:9}": {
+            "max": 567.780762,
+            "avg": 174.62831882448955,
+            "min": 107.028487,
+            "med": 151.287729,
+            "p(90)": 191.02869400000017,
+            "p(99)": 502.2715601000005,
+            "thresholds": {
+                "p(99)>=0": false
+            }
+        },
+        "reservations_reserved": {
+            "count": 100,
+            "rate": 47.651910350575946,
+            "thresholds": {
+                "count==100": false
+            }
+        },
+        "data_sent": {
+            "count": 663254,
+            "rate": 316053.201476609
+        },
+        "data_received": {
+            "rate": 204872.7172848522,
+            "count": 429936
+        },
+        "reservations_failed": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "vus_max": {
+            "value": 500,
+            "min": 500,
+            "max": 500
+        },
+        "grpc_req_duration{status:0}": {
+            "max": 482.599872,
+            "avg": 271.4025558235293,
+            "min": 1.864915,
+            "med": 262.6740415,
+            "p(90)": 424.53489420000005,
+            "p(99)": 476.93587849,
+            "thresholds": {
+                "p(99)>=0": false
+            }
+        },
+        "iterations": {
+            "count": 5000,
+            "rate": 2382.5955175287972
+        },
+        "reservations_sold_out": {
+            "count": 4900,
+            "rate": 2334.943607178221
+        },
+        "vus": {
+            "value": 500,
+            "min": 500,
+            "max": 500
+        },
+        "grpc_req_duration": {
+            "med": 151.735556,
+            "p(90)": 272.5563587000002,
+            "p(99)": 502.05236274,
+            "max": 567.780762,
+            "avg": 176.60172389724087,
+            "min": 1.864915
+        },
+        "iteration_duration": {
+            "avg": 197.89067516240027,
+            "min": 107.454266,
+            "med": 152.5662255,
+            "p(90)": 339.89055900000045,
+            "p(99)": 669.09643212,
+            "max": 696.314173
+        }
+    },
+    "setup_data": {
+        "sku": "HOT-1792575180408"
+    }
+}

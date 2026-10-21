@@ -33,3 +33,6 @@ deploy/k6/results/
 
 # rapid writes replay files for failing property tests; reproduce from the seed in the test output instead
 **/testdata/rapid/
+
+# raw benchmark output before it is curated into docs/benchmarks
+bench-results/

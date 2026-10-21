@@ -1,0 +1,92 @@
+{
+    "metrics": {
+        "iterations": {
+            "count": 5000,
+            "rate": 2645.825289197634
+        },
+        "reservations_reserved": {
+            "rate": 52.91650578395268,
+            "count": 100,
+            "thresholds": {
+                "count==100": false
+            }
+        },
+        "grpc_req_duration{status:0}": {
+            "med": 251.38396899999998,
+            "p(90)": 341.9167489,
+            "p(99)": 384.63582028999997,
+            "max": 406.106873,
+            "avg": 237.08677651960784,
+            "min": 1.112469,
+            "thresholds": {
+                "p(99)>=0": false
+            }
+        },
+        "data_sent": {
+            "count": 662757,
+            "rate": 350707.84623855125
+        },
+        "vus": {
+            "value": 500,
+            "min": 500,
+            "max": 500
+        },
+        "vus_max": {
+            "min": 500,
+            "max": 500,
+            "value": 500
+        },
+        "reservations_failed": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "iteration_duration": {
+            "min": 82.583277,
+            "med": 145.29870899999997,
+            "p(90)": 302.0775449000008,
+            "p(99)": 586.6368932500001,
+            "max": 606.892796,
+            "avg": 179.9513590625995
+        },
+        "reservations_sold_out": {
+            "count": 4900,
+            "rate": 2592.9087834136812
+        },
+        "grpc_req_duration{status:9}": {
+            "avg": 165.96251170591816,
+            "min": 82.281714,
+            "med": 144.073778,
+            "p(90)": 192.8435164000004,
+            "p(99)": 434.7509004300001,
+            "max": 462.628072,
+            "thresholds": {
+                "p(99)>=0": false
+            }
+        },
+        "grpc_req_duration": {
+            "avg": 167.41286656617325,
+            "min": 1.112469,
+            "med": 144.358883,
+            "p(90)": 272.5537814000028,
+            "p(99)": 434.7179766999995,
+            "max": 462.628072
+        },
+        "data_received": {
+            "count": 430368,
+            "rate": 227735.70761228146
+        }
+    },
+    "setup_data": {
+        "sku": "HOT-1792575164756"
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {}
+    }
+}
