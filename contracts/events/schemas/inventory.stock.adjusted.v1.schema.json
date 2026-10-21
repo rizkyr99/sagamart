@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sagamart.dev/schemas/events/schemas/inventory.stock.adjusted.v1.schema.json",
+  "title": "inventory.stock.adjusted/v1",
+  "description": "An admin set the on-hand quantity of a SKU (PRD FR-11, RFC-0001 §4.4). Reservations, commits and releases don't emit this event.",
+  "allOf": [{ "$ref": "../envelope.schema.json" }],
+  "properties": {
+    "type": { "const": "inventory.stock.adjusted" },
+    "source": { "const": "inventory" },
+    "dataschema": { "const": "inventory.stock.adjusted/v1" },
+    "data": {
+      "type": "object",
+      "required": ["sku", "onHand", "available", "version"],
+      "properties": {
+        "sku": { "description": "Also the event subject.", "type": "string", "minLength": 1 },
+        "onHand": { "type": "integer", "minimum": 0 },
+        "available": { "description": "onHand minus reserved at the time of the change.", "type": "integer", "minimum": 0 },
+        "version": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -8,7 +8,7 @@ The full process is in [docs/engineering/development-process.md](docs/engineerin
 |---|---|---|
 | Docker + Compose v2 | 27+ / 2.29+ | Everything (`make up`) |
 | GNU Make | 4+ | The single entry point |
-| Go | 1.23+ | Inventory, Payment, Event workers, mock provider, invariant checker |
+| Go | 1.25+ | Inventory, Payment, Event workers, mock provider, invariant checker |
 | Node.js | 22 LTS+ | Gateway, Catalog + Cart, web app |
 | Java | 21+ | Order service |
 

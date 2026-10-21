@@ -5,7 +5,10 @@ SHELL := /bin/bash
 
 COMPOSE_INFRA := docker compose -f deploy/compose/infra.yml --env-file deploy/compose/.env
 BUF_IMAGE     := bufbuild/buf:1.45.0
-BUF           := docker run --rm -v "$(CURDIR):/workspace" -w /workspace/contracts $(BUF_IMAGE)
+BUF           := docker run --rm --user $(shell id -u):$(shell id -g) -e HOME=/tmp -v "$(CURDIR):/workspace" -w /workspace/contracts $(BUF_IMAGE)
+
+AJV           := npx --yes -p ajv-cli@5.0.0 -p ajv-formats@3.0.1 ajv --spec=draft2020 -c ajv-formats --strict=false
+EVENTS        := contracts/events
 
 SERVICES := $(notdir $(wildcard services/*))
 
@@ -56,6 +59,25 @@ contracts-lint: ## Lint protobuf contracts with buf
 contracts-breaking: ## Check protobuf contracts for breaking changes against main
 	$(BUF) breaking --against '/workspace/.git#branch=main,subdir=contracts'
 
+.PHONY: contracts-generate
+contracts-generate: ## Regenerate code from protobuf contracts (committed under contracts/gen)
+	$(BUF) generate
+	cd contracts/gen/go && go mod tidy
+
+.PHONY: contracts-events
+contracts-events: ## Compile event schemas and validate every example against its schema
+	$(AJV) compile -s $(EVENTS)/envelope.schema.json
+	@set -e; for schema in $(EVENTS)/schemas/*.schema.json; do \
+		name=$$(basename $$schema .schema.json); \
+		example=$(EVENTS)/examples/$$name.json; \
+		if [ ! -f $$example ]; then echo "missing example for $$name: $$example"; exit 1; fi; \
+		$(AJV) validate -s $$schema -r $(EVENTS)/envelope.schema.json -d $$example; \
+	done
+	@set -e; for example in $(EVENTS)/examples/*.json; do \
+		name=$$(basename $$example .json); \
+		if [ ! -f $(EVENTS)/schemas/$$name.schema.json ]; then echo "example without a schema: $$example"; exit 1; fi; \
+	done
+
 .PHONY: contracts-format
 contracts-format: ## Format protobuf contracts in place
 	$(BUF) format -w
@@ -69,7 +91,7 @@ test: ## Run unit tests for every service that has a Makefile
 	done
 
 .PHONY: lint
-lint: contracts-lint ## Run all linters
+lint: contracts-lint contracts-events ## Run all linters
 	@set -e; for s in $(SERVICES); do \
 		if [ -f services/$$s/Makefile ]; then echo "==> $$s"; $(MAKE) -C services/$$s lint; fi; \
 	done

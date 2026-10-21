@@ -1,0 +1,15 @@
+{
+  "id": "0199f2b0-1d2e-7f30-9a4b-5c6d7e8f9012",
+  "type": "inventory.stock.adjusted",
+  "source": "inventory",
+  "specversion": "1.0",
+  "time": "2026-10-21T02:00:00.000Z",
+  "subject": "KAOS-001-M",
+  "dataschema": "inventory.stock.adjusted/v1",
+  "data": {
+    "sku": "KAOS-001-M",
+    "onHand": 100,
+    "available": 97,
+    "version": 4
+  }
+}

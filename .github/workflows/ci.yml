@@ -88,6 +88,25 @@ jobs:
           breaking: ${{ github.event_name == 'pull_request' && steps.base.outputs.has_contracts == 'true' }}
           breaking_against: ${{ github.event.repository.clone_url }}#branch=main,subdir=contracts
           push: false
+      - name: Generated code is up to date
+        working-directory: contracts
+        run: |
+          buf generate
+          if [ -n "$(git status --porcelain -- gen)" ]; then
+            git status --short -- gen
+            echo "contracts/gen is stale: run 'make contracts-generate' and commit the result"
+            exit 1
+          fi
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: contracts/gen/go/go.mod
+          cache-dependency-path: contracts/gen/go/go.sum
+      - name: Generated Go module builds and is tidy
+        working-directory: contracts/gen/go
+        run: |
+          go mod tidy -diff
+          go build ./...
+          go vet ./...
 
   event-schemas:
     needs: changes
@@ -95,8 +114,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate JSON Schemas compile
-        run: npx --yes -p ajv-cli@5.0.0 -p ajv-formats@3.0.1 ajv compile --spec=draft2020 -c ajv-formats -s "contracts/events/**/*.schema.json"
+      - name: Schemas compile and every example validates
+        run: make contracts-events
 
   # ---- Gate ----
 
