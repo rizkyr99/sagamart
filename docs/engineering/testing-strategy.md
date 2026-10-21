@@ -79,29 +79,35 @@ Feature files live in `tests/acceptance/features/`; step definitions call the pu
 ## 3. What to test where
 
 ### Unit tests
+
 - Pure domain logic: price calculation, order state machine transitions, reservation expiry ordering, ledger balancing, rate limiter.
 - Table-driven in Go; parameterised tests in Java (JUnit 5) and Jest/Vitest in TypeScript.
 - Concurrency-sensitive Go code is run with `go test -race` always.
 - Property-based tests for invariants where it pays off (e.g. "available never goes below zero" for any sequence of reserve/release/commit), using `rapid` (Go) or jqwik (Java).
 
 ### Integration tests
+
 - Repository code against a real Postgres (Testcontainers), never mocks of the database.
 - Outbox relay: a state change produces exactly one event on a real Redpanda.
 - Consumers: duplicate delivery of the same event changes state once.
 - Each test owns its data (unique IDs) so tests can run in parallel.
 
 ### Contract tests
+
 - REST: OpenAPI specs in `contracts/openapi/` are the source of truth; servers are validated against them in CI and clients are generated from them.
 - gRPC: generated from `contracts/proto/`; `buf breaking` blocks incompatible changes.
 - Events: each event has a schema in `contracts/events/`. Producers have a test that validates emitted events against the schema; consumers have a test that parses the example payloads. A CI check rejects non-additive schema changes within a version.
 
 ### End-to-end tests (Playwright)
+
 Kept deliberately few, one per critical journey:
+
 1. Browse → search → add to cart → checkout → mock pay → see `CONFIRMED` live.
 2. Checkout → payment fails → order `CANCELLED`, stock restored.
 3. Admin edits product → change appears in search.
 
 ### Load tests (k6)
+
 | Scenario | Shape | Pass criteria |
 |---|---|---|
 | Browse | 500 VUs, read-heavy mix | p99 < 200 ms, error rate < 0.1% |
@@ -111,6 +117,7 @@ Kept deliberately few, one per critical journey:
 Results go to `docs/benchmarks/` with hardware, versions, methodology and raw numbers.
 
 ### Chaos tests
+
 | Experiment | Injected fault | Invariant checked |
 |---|---|---|
 | C1 | Kill Order service mid-checkout | Every order reaches a terminal state; no stock leaked |

@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+# Dev-only credentials for local Docker Compose are intentionally committed in .env.example files.
+[allowlist]
+description = "Local development examples"
+paths = ['''(^|/)\.env\.example$''']

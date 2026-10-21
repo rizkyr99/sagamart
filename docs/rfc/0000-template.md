@@ -21,31 +21,39 @@ Which PRD requirements or problems does this address? What happens if we don't d
 ## 3. Goals and non-goals
 
 **Goals**
+
 - ...
 
 **Non-goals**
+
 - ...
 
 ## 4. Proposed design
 
 ### 4.1 Overview
+
 Diagram (Mermaid) plus a short explanation.
 
 ### 4.2 API and contract changes
+
 New or changed endpoints, gRPC methods and events, with schemas or links to `contracts/`.
 
 ### 4.3 Data model
+
 Tables / items, keys, indexes, migrations.
 
 ### 4.4 Key flows
+
 Sequence diagrams for the happy path and each failure path.
 
 ### 4.5 Failure modes
+
 | Failure | Detection | Behaviour | Recovery |
 |---|---|---|---|
 | ... | ... | ... | ... |
 
 ### 4.6 Concurrency and consistency
+
 Where can races happen? What guarantees ordering and idempotency?
 
 ## 5. Alternatives considered

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sagamart.dev/schemas/events/envelope.schema.json",
+  "title": "Sagamart event envelope",
+  "description": "CloudEvents-compatible envelope shared by every Sagamart event (conventions §6). The payload in `data` is validated by the schema named in `dataschema`.",
+  "type": "object",
+  "required": ["id", "type", "source", "specversion", "time", "subject", "dataschema", "data"],
+  "properties": {
+    "id": {
+      "description": "UUIDv7 of this event; consumers deduplicate on it.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "type": {
+      "description": "<context>.<past-tense-verb> or <context>.<entity>.<past-tense-verb>.",
+      "type": "string",
+      "pattern": "^[a-z]+(\\.[a-z_]+){1,2}$"
+    },
+    "source": {
+      "description": "Name of the publishing service.",
+      "type": "string",
+      "enum": ["catalog", "order", "payment", "inventory"]
+    },
+    "specversion": { "const": "1.0" },
+    "time": {
+      "description": "When the fact happened, UTC RFC 3339.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "subject": {
+      "description": "Aggregate ID; also the partition key.",
+      "type": "string",
+      "minLength": 1
+    },
+    "dataschema": {
+      "description": "<event type>/v<major>, e.g. order.confirmed/v1.",
+      "type": "string",
+      "pattern": "^[a-z]+(\\.[a-z_]+){1,2}/v[0-9]+$"
+    },
+    "traceparent": {
+      "description": "W3C trace context of the transaction that produced the event.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    },
+    "data": { "type": "object" }
+  },
+  "additionalProperties": false
+}

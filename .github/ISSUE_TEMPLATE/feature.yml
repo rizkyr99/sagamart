@@ -1,0 +1,46 @@
+name: Feature
+description: New behaviour linked to a PRD requirement or stage goal
+labels: [feature]
+body:
+  - type: input
+    id: requirement
+    attributes:
+      label: Requirement or stage goal
+      description: PRD requirement ID (FR-xx) or the stage goal this serves
+      placeholder: FR-06
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What and why
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable statements; these become the first failing tests
+      placeholder: |
+        - [ ] Given ..., when ..., then ...
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      options: ["S (up to 2 h)", "M (up to 6 h)", "L (up to 12 h)"]
+    validations:
+      required: true
+  - type: dropdown
+    id: design
+    attributes:
+      label: Design needed first?
+      options: ["No", "RFC", "ADR", "Contract change"]
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Other issues or contracts this needs

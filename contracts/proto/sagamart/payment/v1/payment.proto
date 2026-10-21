@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package sagamart.payment.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/rizkyr99/sagamart/contracts/gen/go/sagamart/payment/v1;paymentv1";
+option java_multiple_files = true;
+option java_package = "dev.sagamart.contracts.payment.v1";
+
+// PaymentService takes money exactly once per order. It is called by the Order saga orchestrator.
+// Payment outcomes arrive asynchronously as payment.succeeded / payment.failed events.
+// Draft: semantics are finalised in RFC-0002 (checkout saga).
+service PaymentService {
+  // CreatePaymentIntent is idempotent on idempotency_key (= order_id, PRD FR-07).
+  // A retry returns the original intent unchanged.
+  rpc CreatePaymentIntent(CreatePaymentIntentRequest) returns (CreatePaymentIntentResponse);
+
+  // VoidPaymentIntent cancels an intent that has not been captured. Voiding twice succeeds.
+  // Errors: FAILED_PRECONDITION when the intent is already captured (refund instead).
+  rpc VoidPaymentIntent(VoidPaymentIntentRequest) returns (VoidPaymentIntentResponse);
+
+  // RefundPayment refunds a captured payment in full. Idempotent on idempotency_key (= order_id + ":refund").
+  rpc RefundPayment(RefundPaymentRequest) returns (RefundPaymentResponse);
+}
+
+message Money {
+  // Whole rupiah; never fractional (conventions §3).
+  int64 amount = 1;
+  // ISO 4217; always "IDR" for now.
+  string currency = 2;
+}
+
+message CreatePaymentIntentRequest {
+  string order_id = 1;
+  string idempotency_key = 2;
+  Money amount = 3;
+  string payment_method = 4;
+}
+
+message CreatePaymentIntentResponse {
+  string payment_intent_id = 1;
+  PaymentStatus status = 2;
+  // Where the buyer completes the (mock) payment.
+  string redirect_url = 3;
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+message VoidPaymentIntentRequest {
+  string order_id = 1;
+}
+
+message VoidPaymentIntentResponse {
+  PaymentStatus status = 1;
+}
+
+message RefundPaymentRequest {
+  string order_id = 1;
+  string idempotency_key = 2;
+}
+
+message RefundPaymentResponse {
+  string refund_id = 1;
+  PaymentStatus status = 2;
+}
+
+enum PaymentStatus {
+  PAYMENT_STATUS_UNSPECIFIED = 0;
+  PAYMENT_STATUS_REQUIRES_ACTION = 1;
+  PAYMENT_STATUS_SUCCEEDED = 2;
+  PAYMENT_STATUS_FAILED = 3;
+  PAYMENT_STATUS_VOIDED = 4;
+  PAYMENT_STATUS_REFUNDED = 5;
+}

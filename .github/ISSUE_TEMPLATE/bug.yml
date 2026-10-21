@@ -1,0 +1,33 @@
+name: Bug
+description: Something behaves differently from the PRD, contracts or docs
+labels: [bug]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Trace ID or logs
+      description: Paste a trace ID from Jaeger or the relevant structured log lines
+      render: text
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - "Critical: invariant violated (oversell, double charge, lost order)"
+        - "High: a journey is broken"
+        - "Medium: degraded behaviour with a workaround"
+        - "Low: cosmetic"
+    validations:
+      required: true

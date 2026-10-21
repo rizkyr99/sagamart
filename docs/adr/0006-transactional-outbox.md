@@ -13,16 +13,22 @@ When a service changes state and publishes an event, two systems are involved: i
 ## Options considered
 
 ### Option A — Dual write
+
 Write to the database, then publish.
+
 - **Cons:** inconsistent on crash between the two steps. Rejected.
 
 ### Option B — Outbox with polling relay
+
 Write the event into an `outbox` table in the same transaction as the state change. A relay process polls unpublished rows (`FOR UPDATE SKIP LOCKED`, in batches), publishes them, and marks them published.
+
 - **Pros:** simple, no extra infrastructure, easy to reason about and test.
 - **Cons:** polling adds latency (tens to hundreds of ms) and load on the database.
 
 ### Option C — Outbox with CDC (Debezium)
+
 Stream the outbox table from the database log.
+
 - **Pros:** lower latency, no polling load.
 - **Cons:** extra infrastructure (Kafka Connect, Debezium), more to operate locally.
 

@@ -16,14 +16,17 @@ Using several languages adds tooling, CI and operational overhead. Using one lan
 ## Options considered
 
 ### Option A — single language (Go everywhere)
+
 - **Pros:** one toolchain, shared libraries, maximum Go depth.
 - **Cons:** slower to build CRUD and BFF layers; loses the chance to use Spring's mature transaction and state-machine tooling.
 
 ### Option B — single language (NestJS everywhere)
+
 - **Pros:** fastest to build given current skills.
 - **Cons:** weak fit for the high-concurrency hot paths; does not serve the Go learning goal.
 
 ### Option C — language per workload
+
 - **NestJS** for the gateway/BFF and Catalog + Cart (I/O-bound CRUD, typed shared models with the frontend).
 - **Java / Spring Boot** for Order (transactions, saga state machine, mature outbox patterns).
 - **Go** for Inventory, Payment and Event workers (contention, concurrency, low memory per connection, predictable latency).

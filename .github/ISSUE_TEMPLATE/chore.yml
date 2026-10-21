@@ -1,0 +1,17 @@
+name: Chore
+description: Dependency update, refactor or tooling work
+labels: [chore]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What and why
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      options: ["S (up to 2 h)", "M (up to 6 h)", "L (up to 12 h)"]
+    validations:
+      required: true
