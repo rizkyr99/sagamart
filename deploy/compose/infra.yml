@@ -128,6 +128,8 @@ services:
     ports: ["${REDPANDA_CONSOLE_PORT}:8080"]
     depends_on:
       redpanda: { condition: service_healthy }
+      # Waiting for the one-shot init to complete also keeps `docker compose up --wait` from treating its exit as a failure.
+      redpanda-init: { condition: service_completed_successfully }
 
   # Creates one topic per context, keyed by aggregate ID. Partition counts are revisited in RFC-0002.
   redpanda-init:

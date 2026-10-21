@@ -4,14 +4,15 @@ A polyglot, event-driven ecommerce platform (NestJS, Java/Spring Boot, Go) built
 
 The product is a single-merchant store for Indonesian shoppers. The engineering goal is that it never oversells, never double-charges and never loses an order, and that this is proven under load and injected failure.
 
-> **Status:** Stage 0 — Foundation. Services land from Stage 1; see the [release plan](docs/product/prd.md#9-release-scope-and-timeline).
+> **Status:** Stage 1 — First slice. The Inventory service skeleton is running; see the [release plan](docs/product/prd.md#9-release-scope-and-timeline).
 
 ## Quick start
 
 Requirements: Docker with Compose v2, GNU Make.
 
 ```bash
-make up      # start Postgres x4, Redpanda, Redis, DynamoDB Local, Meilisearch, OTel, Prometheus, Jaeger, Grafana
+make up      # infrastructure only: Postgres x4, Redpanda, Redis, DynamoDB Local, Meilisearch, OTel, Prometheus, Jaeger, Grafana
+make demo    # infrastructure plus every service, built from source
 make ps      # check container health
 make help    # list every target
 ```

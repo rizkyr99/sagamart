@@ -20,6 +20,7 @@ jobs:
     outputs:
       docs: ${{ steps.filter.outputs.docs }}
       contracts: ${{ steps.filter.outputs.contracts }}
+      inventory: ${{ steps.filter.outputs.inventory }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -36,6 +37,11 @@ jobs:
             contracts:
               - *workflow
               - "contracts/**"
+            inventory:
+              - *workflow
+              - "services/inventory/**"
+              - "contracts/gen/go/**"
+              - ".golangci.yml"
 
   # ---- Docs ----
 
@@ -117,11 +123,47 @@ jobs:
       - name: Schemas compile and every example validates
         run: make contracts-events
 
+  # ---- Services ----
+
+  inventory:
+    needs: changes
+    if: needs.changes.outputs.inventory == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/inventory
+    steps:
+      - uses: actions/checkout@v4
+      # v6 honours the toolchain directive, so CI uses the same Go as Docker and local builds.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: services/inventory/go.mod
+          cache-dependency-path: |
+            services/inventory/go.sum
+            contracts/gen/go/go.sum
+      - name: Go version
+        run: go version
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: go mod tidy
+        run: go mod tidy -diff
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.15.0
+          # Build the linter with the module's toolchain so it understands the Go version in go.mod.
+          install-mode: goinstall
+          working-directory: services/inventory
+      - name: Unit and integration tests (race detector, Testcontainers)
+        run: go test -race -count=1 ./...
+      - name: Image builds
+        working-directory: .
+        run: docker build -f services/inventory/Dockerfile -t sagamart-inventory:ci .
+
   # ---- Gate ----
 
   ci:
     if: always()
-    needs: [changes, markdown, links, proto, event-schemas]
+    needs: [changes, markdown, links, proto, event-schemas, inventory]
     runs-on: ubuntu-latest
     steps:
       - name: Every job that ran passed

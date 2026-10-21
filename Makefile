@@ -3,7 +3,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-COMPOSE_INFRA := docker compose -f deploy/compose/infra.yml --env-file deploy/compose/.env
+COMPOSE       := docker compose -f deploy/compose/infra.yml -f deploy/compose/services.yml --env-file deploy/compose/.env
 BUF_IMAGE     := bufbuild/buf:1.45.0
 BUF           := docker run --rm --user $(shell id -u):$(shell id -g) -e HOME=/tmp -v "$(CURDIR):/workspace" -w /workspace/contracts $(BUF_IMAGE)
 
@@ -22,28 +22,30 @@ deploy/compose/.env:
 ## ---- Local environment ----
 
 .PHONY: up
-up: deploy/compose/.env ## Start local infrastructure (databases, broker, observability)
-	$(COMPOSE_INFRA) up -d --wait
+up: deploy/compose/.env ## Start local infrastructure only (databases, broker, observability); run services from source
+	$(COMPOSE) up -d --wait
 
 .PHONY: down
-down: deploy/compose/.env ## Stop local infrastructure (keeps volumes)
-	$(COMPOSE_INFRA) down
+down: deploy/compose/.env ## Stop everything (keeps volumes)
+	$(COMPOSE) --profile services down
 
 .PHONY: clean
-clean: deploy/compose/.env ## Stop local infrastructure and delete its volumes
-	$(COMPOSE_INFRA) down -v
+clean: deploy/compose/.env ## Stop everything and delete volumes
+	$(COMPOSE) --profile services down -v
 
 .PHONY: ps
 ps: deploy/compose/.env ## Show container status
-	$(COMPOSE_INFRA) ps
+	$(COMPOSE) --profile services ps
 
 .PHONY: logs
-logs: deploy/compose/.env ## Follow infrastructure logs
-	$(COMPOSE_INFRA) logs -f --tail=100
+logs: deploy/compose/.env ## Follow logs
+	$(COMPOSE) --profile services logs -f --tail=100
 
 .PHONY: demo
-demo: up ## Bring up the full system (services are added as they land)
-	@echo "Infrastructure is up. Services will be added to the demo stack from Stage 1."
+demo: deploy/compose/.env ## Build and start the full system: infrastructure plus every service
+	$(COMPOSE) --profile services up -d --build --wait
+	@echo "Sagamart is up."
+	@echo "  Inventory         gRPC localhost:9110, probes and metrics http://localhost:8110"
 	@echo "  Redpanda console  http://localhost:8080"
 	@echo "  Grafana           http://localhost:3001  (admin / admin)"
 	@echo "  Jaeger            http://localhost:16686"

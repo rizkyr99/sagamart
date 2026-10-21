@@ -1,0 +1,28 @@
+# Shared by every Go module in the repo (golangci-lint finds it by walking up from the module).
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - errorlint
+    - gosec
+    - misspell
+    - noctx
+    - sloglint
+    - unconvert
+  settings:
+    sloglint:
+      kv-only: true # key/value pairs, not slog.Attr, to match the logging conventions
+  exclusions:
+    presets: [std-error-handling]
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx]
+
+formatters:
+  enable: [gofmt, goimports]
+  settings:
+    goimports:
+      local-prefixes: [github.com/rizkyr99/sagamart]
