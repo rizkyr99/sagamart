@@ -1,6 +1,10 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
 
 // Domain errors. The gRPC layer maps each to a status code and ErrorInfo reason (see the inventory contract).
 var (
@@ -27,9 +31,15 @@ type InsufficientStockError struct {
 	Shortfalls []Shortfall
 }
 
-func (e *InsufficientStockError) Error() string { panic("not implemented") }
+func (e *InsufficientStockError) Error() string {
+	parts := make([]string, len(e.Shortfalls))
+	for i, s := range e.Shortfalls {
+		parts[i] = fmt.Sprintf("%s has %d available, %d requested", s.SKU, s.Available, s.Requested)
+	}
+	return "insufficient stock: " + strings.Join(parts, "; ")
+}
 
-func (e *InsufficientStockError) Is(target error) bool { panic("not implemented") }
+func (e *InsufficientStockError) Is(target error) bool { return target == ErrInsufficientStock }
 
 // Violation is one invalid field, named by its path in the request (for a google.rpc.BadRequest detail).
 type Violation struct {
@@ -42,4 +52,24 @@ type ValidationError struct {
 	Violations []Violation
 }
 
-func (e *ValidationError) Error() string { panic("not implemented") }
+func (e *ValidationError) Error() string {
+	parts := make([]string, len(e.Violations))
+	for i, v := range e.Violations {
+		parts[i] = v.Field + ": " + v.Description
+	}
+	return "invalid request: " + strings.Join(parts, "; ")
+}
+
+// violations collects field problems; err returns nil when there are none.
+type violations []Violation
+
+func (vs *violations) add(field, format string, args ...any) {
+	*vs = append(*vs, Violation{Field: field, Description: fmt.Sprintf(format, args...)})
+}
+
+func (vs violations) err() error {
+	if len(vs) == 0 {
+		return nil
+	}
+	return &ValidationError{Violations: vs}
+}

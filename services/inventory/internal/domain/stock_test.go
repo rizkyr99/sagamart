@@ -42,9 +42,9 @@ func TestReserveLinesIsAllOrNothing(t *testing.T) {
 		"KAOS-001": {SKU: "KAOS-001", OnHand: 3, Reserved: 2, Version: 1},
 	}
 	got, err := domain.ReserveLines(levels, []domain.Line{
-		{SKU: "BAJU-001", Quantity: 1},  // fits
-		{SKU: "KAOS-001", Quantity: 2},  // 1 available
-		{SKU: "TOPI-001", Quantity: 1},  // unknown SKU
+		{SKU: "BAJU-001", Quantity: 1}, // fits
+		{SKU: "KAOS-001", Quantity: 2}, // 1 available
+		{SKU: "TOPI-001", Quantity: 1}, // unknown SKU
 	})
 
 	var serr *domain.InsufficientStockError

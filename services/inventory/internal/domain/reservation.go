@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Status is a reservation's lifecycle state. ACTIVE is the only non-final status.
 type Status string
@@ -13,7 +16,7 @@ const (
 )
 
 // Final reports whether no further transition is possible.
-func (s Status) Final() bool { panic("not implemented") }
+func (s Status) Final() bool { return s != StatusActive }
 
 // Reservation is a temporary hold on stock for one order.
 type Reservation struct {
@@ -23,6 +26,9 @@ type Reservation struct {
 	Lines     []Line
 	ExpiresAt time.Time
 }
+
+// expiredAt reports whether the reservation has reached its expiry time. The instant itself counts.
+func (r Reservation) expiredAt(now time.Time) bool { return !now.Before(r.ExpiresAt) }
 
 // Command is something that can happen to an existing reservation.
 type Command string
@@ -50,6 +56,51 @@ type Outcome struct {
 	StockOp StockOp
 }
 
+func transition(to Status, op StockOp) (Outcome, error) {
+	return Outcome{Changed: true, Status: to, StockOp: op}, nil
+}
+
+func unchanged(current Status) (Outcome, error) { return Outcome{Status: current}, nil }
+
 // Decide applies the reservation transition table (RFC-0001 §4.4) to cmd at time now.
 // Expiry is strict: a reservation is expired from ExpiresAt onward, whether or not the worker has run.
-func Decide(r Reservation, cmd Command, now time.Time) (Outcome, error) { panic("not implemented") }
+func Decide(r Reservation, cmd Command, now time.Time) (Outcome, error) {
+	switch r.Status {
+	case StatusActive, StatusCommitted, StatusReleased, StatusExpired:
+	default:
+		return Outcome{}, fmt.Errorf("%w: unknown reservation status %q", ErrInvariant, r.Status)
+	}
+
+	switch cmd {
+	case CommandCommit:
+		switch {
+		case r.Status == StatusCommitted:
+			return unchanged(r.Status)
+		case r.Status == StatusActive && !r.expiredAt(now):
+			return transition(StatusCommitted, StockOpCommit)
+		default: // released, expired, or active but past its expiry time
+			return Outcome{}, ErrReservationNotFound
+		}
+
+	case CommandRelease:
+		switch r.Status {
+		case StatusActive:
+			return transition(StatusReleased, StockOpRelease)
+		case StatusCommitted:
+			return Outcome{}, ErrReservationCommitted
+		default: // already released or expired: the stock is already back
+			return unchanged(r.Status)
+		}
+
+	case CommandExpire:
+		switch {
+		case r.Status.Final():
+			return unchanged(r.Status)
+		case !r.expiredAt(now):
+			return Outcome{}, ErrNotDue
+		default:
+			return transition(StatusExpired, StockOpRelease)
+		}
+	}
+	return Outcome{}, fmt.Errorf("%w: unknown command %q", ErrInvariant, cmd)
+}
