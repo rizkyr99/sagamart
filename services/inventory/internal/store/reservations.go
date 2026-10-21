@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
@@ -23,14 +24,20 @@ import (
 // concurrency comes from atomic conditional updates and row locks taken in a fixed order (RFC-0001 §4.6):
 // the reservation row first, then stock rows in ascending SKU order.
 type Store struct {
-	pool    *pgxpool.Pool
-	metrics storeMetrics
+	pool     *pgxpool.Pool
+	metrics  storeMetrics
+	strategy Strategy
+	redis    *redis.Client
 }
 
 // Option configures a Store.
 type Option func(*options)
 
-type options struct{ meterProvider metric.MeterProvider }
+type options struct {
+	meterProvider metric.MeterProvider
+	strategy      Strategy
+	redis         *redis.Client
+}
 
 // WithMeterProvider records the store's metrics with mp instead of the global provider.
 func WithMeterProvider(mp metric.MeterProvider) Option {
@@ -39,11 +46,11 @@ func WithMeterProvider(mp metric.MeterProvider) Option {
 
 // New returns a Store using pool.
 func New(pool *pgxpool.Pool, opts ...Option) *Store {
-	o := options{meterProvider: otel.GetMeterProvider()}
+	o := options{meterProvider: otel.GetMeterProvider(), strategy: StrategyConditionalUpdate}
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return &Store{pool: pool, metrics: newStoreMetrics(o.meterProvider, pool)}
+	return &Store{pool: pool, metrics: newStoreMetrics(o.meterProvider, pool), strategy: o.strategy, redis: o.redis}
 }
 
 // lineDidNotFit aborts a reservation transaction at the first line without enough available stock.
@@ -59,8 +66,16 @@ func (s *Store) Reserve(ctx context.Context, req domain.ReserveRequest) (domain.
 	lines := slices.Clone(req.Lines)
 	slices.SortFunc(lines, func(a, b domain.Line) int { return cmp.Compare(a.SKU, b.SKU) })
 
+	if s.strategy == StrategyRedisLua {
+		if err := s.redisReserve(ctx, lines); err != nil {
+			return domain.Reservation{}, err
+		}
+	}
+	var reused bool
+
 	var res domain.Reservation
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
+		reused = false
 		id, err := uuid.NewV7()
 		if err != nil {
 			return err
@@ -84,6 +99,7 @@ func (s *Store) Reserve(ctx context.Context, req domain.ReserveRequest) (domain.
 				return err
 			}
 			res = existing.Reservation
+			reused = true
 			return nil
 		}
 		if err != nil {
@@ -93,6 +109,23 @@ func (s *Store) Reserve(ctx context.Context, req domain.ReserveRequest) (domain.
 		for _, line := range lines {
 			// Atomic check-and-reserve: Postgres re-evaluates the WHERE clause against the latest committed
 			// row after waiting for any concurrent writer, so two buyers can't both take the last unit.
+			if s.strategy == StrategyRowLock {
+				// Strategy B: lock the row, decide in Go, then write.
+				var onHand, reserved int64
+				if err := tx.QueryRow(ctx, `SELECT on_hand, reserved FROM stock_levels WHERE sku = $1 FOR UPDATE`, line.SKU).Scan(&onHand, &reserved); err != nil {
+					if errors.Is(err, pgx.ErrNoRows) {
+						return lineDidNotFit{line}
+					}
+					return fmt.Errorf("lock %s: %w", line.SKU, err)
+				}
+				if onHand-reserved < line.Quantity {
+					return lineDidNotFit{line}
+				}
+				if _, err := tx.Exec(ctx, `UPDATE stock_levels SET reserved = reserved + $2, version = version + 1, updated_at = now() WHERE sku = $1`, line.SKU, line.Quantity); err != nil {
+					return fmt.Errorf("reserve %s: %w", line.SKU, err)
+				}
+				continue
+			}
 			tag, err := tx.Exec(ctx, `
 				UPDATE stock_levels
 				SET reserved = reserved + $2, version = version + 1, updated_at = now()
@@ -120,6 +153,9 @@ func (s *Store) Reserve(ctx context.Context, req domain.ReserveRequest) (domain.
 		return nil
 	})
 	err = s.metrics.observe(ctx, err)
+	if s.strategy == StrategyRedisLua && (err != nil || reused) {
+		s.redisRestore(ctx, lines)
+	}
 
 	var notFit lineDidNotFit
 	if errors.As(err, &notFit) {
@@ -348,6 +384,12 @@ func (s *Store) SetStock(ctx context.Context, sku string, onHand, expectedVersio
 	})
 	if err != nil {
 		return domain.StockLevel{}, s.metrics.observe(ctx, err)
+	}
+	if s.redis != nil {
+		// Benchmark simplification: Redis mirrors availability only through admin changes and Reserve.
+		if err := s.redis.Set(ctx, availKey(sku), next.Available(), 0).Err(); err != nil {
+			return domain.StockLevel{}, fmt.Errorf("mirror stock to redis: %w", err)
+		}
 	}
 	return next, nil
 }

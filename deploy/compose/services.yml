@@ -15,6 +15,8 @@ services:
       INVENTORY_DB_URL: postgres://${INVENTORY_DB_USER}:${INVENTORY_DB_PASSWORD}@inventory-db:5432/inventory?sslmode=disable
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       INVENTORY_KAFKA_BROKERS: redpanda:9092
+      INVENTORY_RESERVE_STRATEGY: ${INVENTORY_RESERVE_STRATEGY:-a} # benchmark branch only
+      INVENTORY_REDIS_ADDR: redis:6379 # benchmark branch only
     # Loopback only: SetStockLevel has no authorization until #17, so don't expose it beyond this machine.
     ports:
       - "127.0.0.1:${INVENTORY_HTTP_PORT:-8110}:8110"

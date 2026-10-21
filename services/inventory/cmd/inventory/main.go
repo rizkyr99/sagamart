@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -101,7 +102,18 @@ func run(ctx context.Context) error {
 	}
 	defer pool.Close()
 
-	reservations := store.New(pool)
+	// BENCHMARK BRANCH ONLY: choose the reservation strategy for ADR-0008.
+	strategy := store.Strategy(os.Getenv("INVENTORY_RESERVE_STRATEGY"))
+	if strategy == "" {
+		strategy = store.StrategyConditionalUpdate
+	}
+	var rdb *redis.Client
+	if addr := os.Getenv("INVENTORY_REDIS_ADDR"); addr != "" {
+		rdb = redis.NewClient(&redis.Options{Addr: addr})
+		defer rdb.Close()
+	}
+	log.Info("reservation strategy", "strategy", string(strategy), "redis", rdb != nil)
+	reservations := store.New(pool, store.WithStrategy(strategy, rdb))
 	grpcSrv, health := server.NewGRPCServer(cfg.Env)
 	inventoryv1.RegisterInventoryServiceServer(grpcSrv,
 		grpcapi.New(reservations, domain.NewLimits(cfg.MaxLineQuantity), log))
