@@ -30,3 +30,6 @@ build/
 playwright-report/
 test-results/
 deploy/k6/results/
+
+# rapid writes replay files for failing property tests; reproduce from the seed in the test output instead
+**/testdata/rapid/
