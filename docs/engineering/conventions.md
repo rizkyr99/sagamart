@@ -15,7 +15,7 @@ sagamart/
 ├── .github/
 │   ├── ISSUE_TEMPLATE/       # feature, bug, chore templates
 │   ├── pull_request_template.md
-│   └── workflows/            # CI per service + docs + contracts
+│   └── workflows/            # ci.yml (jobs per service, docs, contracts; one `ci` gate) + security.yml
 ├── apps/
 │   └── web/                  # Next.js storefront + admin
 ├── services/
