@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Author** | Rizky |
-| **Status** | In review |
+| **Status** | Accepted |
 | **Created** | 2026-10-21 |
 | **Stage** | 1 First slice |
 | **Related** | PRD [FR-03, FR-06, FR-11, J6](../product/prd.md), [System Design §5](../architecture/system-design.md#5-key-flow-checkout-saga), [ADR-0004](../adr/0004-database-per-service.md), [ADR-0005](../adr/0005-orchestrated-checkout-saga.md), [ADR-0006](../adr/0006-transactional-outbox.md) |
@@ -70,7 +70,7 @@ Changes to the draft `sagamart.inventory.v1.InventoryService` ([contract](../../
 
 Error details carry a domain `code` (`INSUFFICIENT_STOCK`, `RESERVATION_NOT_FOUND`, `RESERVATION_COMMITTED`, `VERSION_CONFLICT`) in a `google.rpc.ErrorInfo`, so callers never parse messages. `INSUFFICIENT_STOCK` lists each failing SKU with its available quantity, which the gateway turns into the Problem Details `detail`.
 
-Validation: 1–50 lines per reservation, unique SKUs, quantity 1–100 per line, TTL between 1 and 30 minutes (default 10).
+Validation: 1–50 lines per reservation, unique SKUs, quantity 1–100 per line (configurable as `INVENTORY_MAX_LINE_QUANTITY`; a sanity limit, not a purchase policy), TTL between 1 and 30 minutes (default 10).
 
 **Events** (topic `inventory.events`, key = `subject`):
 
@@ -182,6 +182,7 @@ For each row, in the same transaction: release its stock, set `EXPIRED`, write `
 | Saga retries `ReserveStock` after a timeout whose first attempt actually succeeded | `order_id` unique conflict | Original reservation returned | None needed |
 | Commit arrives after expiry | `expires_at <= now()` or status `EXPIRED` | `RESERVATION_NOT_FOUND` | Saga refunds and cancels (System Design §5) |
 | Inventory DB slow or down | gRPC deadline exceeded / `UNAVAILABLE` | No partial state: each command is one transaction | Saga retries with backoff; `/readyz` fails so traffic drains |
+| Inventory down while buyers browse | Gateway's `GetStockLevels` call times out (150 ms) | Product pages still render, with stock shown as "unknown" | None needed; pages show live stock again once Inventory is back |
 | Redpanda down | Outbox rows stay unpublished | Commands keep working; events are delayed, not lost | Relay catches up when Redpanda returns |
 | Inventory crashes mid-transaction | — | Postgres rolls back | Caller retries (idempotent) |
 | Application bug would oversell | `stock_never_oversold` constraint violation | Transaction fails, error logged and counted | Alert on `constraint_violations_total > 0`; fix forward |
@@ -266,12 +267,16 @@ Nothing calls Inventory until Stage 2, so each step merges independently without
 
 ## 11. Open questions
 
-- [ ] Should a commit that arrives a few seconds after `expires_at`, but before the worker runs, be honoured instead (fewer refunds), or is the strict rule better (one meaning of "expired")? Proposed: strict.
-- [ ] Is a per-line quantity cap of 100 right for flash sales, or should there be a per-buyer limit (which needs the buyer ID, so belongs in Order or the gateway)?
-- [ ] Should `GetStockLevels` be cached at the gateway (e.g. 1 s in Redis) to protect Inventory during browse load, given FR-03 says "live" stock status?
+- [x] Should a commit that arrives after `expires_at`, but before the worker runs, be honoured? **No: strict expiry.** See the decision log.
+- [x] Is a per-line cap of 100 right, or should there be a per-buyer limit? **Keep the configurable per-line cap; per-buyer limits are out of Inventory and out of the MVP.**
+- [x] Should `GetStockLevels` be cached at the gateway? **Not in the MVP; stock is optional on product pages instead.**
 
 ## 12. Decision log
 
 | Date | Decision | Notes |
 |---|---|---|
 | 2026-10-21 | Draft opened | |
+| 2026-10-21 | Strict expiry: a commit at or after `expires_at` returns `RESERVATION_NOT_FOUND` | The payment deadline (8 min) is shorter than the TTL (10 min), so late commits are rare, and the saga's refund path handles them. One timestamp, compared against Postgres `now()`, decides; the worker and commit never both judge liveness, and clock skew between services can't matter. |
+| 2026-10-21 | Per-line cap 1–100, configurable; no per-buyer limit in Inventory | The cap is input validation. A per-buyer limit is business policy that needs buyer identity and history, so it belongs in Order or the gateway, configured per product in Catalog. Added to the backlog as a "Could"; J6 doesn't need it. |
+| 2026-10-21 | No stock-level cache in the MVP; gateway treats stock as optional with a 150 ms timeout | `GetStockLevels` is a primary-key read and Postgres reads don't wait on reservation row locks, so browsing doesn't contend with the flash sale. A cache would weaken FR-03's "live" stock. If the browse load test (p99 < 200 ms) shows a need, add a 1 s gateway cache with an ADR. |
+| 2026-10-21 | Accepted | |
