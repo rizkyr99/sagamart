@@ -71,3 +71,19 @@ type recorder struct {
 }
 
 func (r *recorder) Errorf(string, ...any) { r.failed = true }
+
+func TestReservationExpiredMatchesContract(t *testing.T) {
+	expiredAt := time.Date(2026, 10, 21, 3, 10, 0, 398_000_000, time.UTC)
+	env, err := events.New(context.Background(), events.TypeReservationExpired, "0199f29e-8a10-7b2c-9d3e-4f5a6b7c8d9e",
+		events.ReservationExpired{
+			OrderID:       "0199f29e-8a10-7b2c-9d3e-4f5a6b7c8d9e",
+			ReservationID: "0199f29e-8b22-7c31-a4d5-6e7f8091a2b3",
+			Lines:         []events.ExpiredLine{{SKU: "BAJU-001-L", Quantity: 1}, {SKU: "KAOS-001-M", Quantity: 2}},
+			ExpiredAt:     events.FormatTime(expiredAt),
+		}, expiredAt)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	payload, _ := json.Marshal(env)
+	schematest.Validate(t, events.TypeReservationExpired, payload)
+}

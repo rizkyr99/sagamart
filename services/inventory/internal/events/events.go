@@ -13,8 +13,12 @@ import (
 
 // Event types published by Inventory; schemas live in contracts/events/schemas.
 const (
-	TypeStockAdjusted = "inventory.stock.adjusted"
+	TypeStockAdjusted      = "inventory.stock.adjusted"
+	TypeReservationExpired = "inventory.reservation.expired"
 )
+
+// FormatTime formats t as the events contract requires: RFC 3339 in UTC with millisecond precision.
+func FormatTime(t time.Time) string { return t.UTC().Format(timeLayout) }
 
 // timeLayout is RFC 3339 in UTC with millisecond precision (conventions §3).
 const timeLayout = "2006-01-02T15:04:05.000Z07:00"
@@ -46,7 +50,7 @@ func New(ctx context.Context, eventType, subject string, data any, at time.Time)
 		Type:        eventType,
 		Source:      "inventory",
 		SpecVersion: "1.0",
-		Time:        at.UTC().Format(timeLayout),
+		Time:        FormatTime(at),
 		Subject:     subject,
 		DataSchema:  eventType + "/v1",
 		TraceParent: carrier.Get("traceparent"),
@@ -60,4 +64,19 @@ type StockAdjusted struct {
 	OnHand    int64  `json:"onHand"`
 	Available int64  `json:"available"`
 	Version   int64  `json:"version"`
+}
+
+// ReservationExpired is the data of inventory.reservation.expired/v1: a reservation passed its TTL before it was
+// committed or released, and its stock was returned. The Order saga cancels the order.
+type ReservationExpired struct {
+	OrderID       string        `json:"orderId"`
+	ReservationID string        `json:"reservationId"`
+	Lines         []ExpiredLine `json:"lines"`
+	ExpiredAt     string        `json:"expiredAt"`
+}
+
+// ExpiredLine is one line of an expired reservation.
+type ExpiredLine struct {
+	SKU      string `json:"sku"`
+	Quantity int64  `json:"quantity"`
 }
