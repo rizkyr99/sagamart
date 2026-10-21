@@ -22,6 +22,7 @@ type Config struct {
 	MigrateOnStart  bool
 	MaxLineQuantity int // RFC-0001 §4.2: a sanity limit, not a purchase policy
 	ShutdownTimeout time.Duration
+	ExpiryInterval  time.Duration // how often the expiry worker looks for due reservations
 }
 
 // Load reads the configuration through getenv. version is the build version, used unless INVENTORY_VERSION is set.
@@ -79,6 +80,15 @@ func Load(getenv func(string) string, version string) (Config, error) {
 		errs = append(errs, fmt.Errorf("INVENTORY_SHUTDOWN_TIMEOUT must be a duration such as 15s: %w", err))
 	}
 	cfg.ShutdownTimeout = timeout
+
+	cfg.ExpiryInterval, err = time.ParseDuration(get("INVENTORY_EXPIRY_INTERVAL", "5s"))
+	switch {
+	case err != nil:
+		errs = append(errs, fmt.Errorf("INVENTORY_EXPIRY_INTERVAL must be a duration such as 5s: %w", err))
+	case cfg.ExpiryInterval <= 0 || cfg.ExpiryInterval > 25*time.Second:
+		// FR-06 releases expired stock within 30 s; leave room for the run itself.
+		errs = append(errs, fmt.Errorf("INVENTORY_EXPIRY_INTERVAL must be between 0 and 25s, got %v", cfg.ExpiryInterval))
+	}
 
 	if len(errs) > 0 {
 		return Config{}, fmt.Errorf("invalid configuration: %w", errors.Join(errs...))

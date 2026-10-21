@@ -31,6 +31,7 @@ func TestLoadDefaults(t *testing.T) {
 		MigrateOnStart:  true,
 		MaxLineQuantity: 100,
 		ShutdownTimeout: 15 * time.Second,
+		ExpiryInterval:  5 * time.Second,
 	}
 	if cfg != want {
 		t.Errorf("Load defaults:\n got %+v\nwant %+v", cfg, want)
@@ -90,6 +91,9 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		{"max quantity too small", map[string]string{"INVENTORY_MAX_LINE_QUANTITY": "0"}, "INVENTORY_MAX_LINE_QUANTITY"},
 		{"bad duration", map[string]string{"INVENTORY_SHUTDOWN_TIMEOUT": "soon"}, "INVENTORY_SHUTDOWN_TIMEOUT"},
 		{"bad bool", map[string]string{"INVENTORY_MIGRATE_ON_START": "maybe"}, "INVENTORY_MIGRATE_ON_START"},
+		{"bad expiry interval", map[string]string{"INVENTORY_EXPIRY_INTERVAL": "often"}, "INVENTORY_EXPIRY_INTERVAL"},
+		{"expiry interval too long for FR-06", map[string]string{"INVENTORY_EXPIRY_INTERVAL": "30s"}, "INVENTORY_EXPIRY_INTERVAL"},
+		{"zero expiry interval", map[string]string{"INVENTORY_EXPIRY_INTERVAL": "0s"}, "INVENTORY_EXPIRY_INTERVAL"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

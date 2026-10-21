@@ -27,7 +27,33 @@ func New(expirer Expirer, interval time.Duration, batch int, log *slog.Logger) *
 }
 
 // Run expires due reservations every interval until ctx is done. Errors are logged and retried on the next tick.
-func (w *Worker) Run(ctx context.Context) { panic("not implemented") }
+func (w *Worker) Run(ctx context.Context) {
+	ticker := time.NewTicker(w.interval)
+	defer ticker.Stop()
+	for {
+		n, err := w.RunOnce(ctx)
+		switch {
+		case err != nil && ctx.Err() == nil:
+			w.log.ErrorContext(ctx, "expiry run failed", "error", err, "expired", n)
+		case n > 0:
+			w.log.InfoContext(ctx, "reservations expired", "count", n)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
 
 // RunOnce expires batches until one comes back short, so a backlog drains in one tick. It returns the total.
-func (w *Worker) RunOnce(ctx context.Context) (int, error) { panic("not implemented") }
+func (w *Worker) RunOnce(ctx context.Context) (int, error) {
+	total := 0
+	for {
+		n, err := w.expirer.ExpireDue(ctx, w.batch)
+		total += n
+		if err != nil || n < w.batch {
+			return total, err
+		}
+	}
+}

@@ -89,9 +89,15 @@ func TestExpireDueReleasesStockAndPublishesEvent(t *testing.T) {
 	if err := json.Unmarshal(payloads[0], &env); err != nil {
 		t.Fatal(err)
 	}
-	if env.Subject != order || env.Data.OrderID != order || env.Data.ReservationID != res.ID || len(env.Data.Lines) != 2 ||
-		env.Data.Lines[0] != (events.ExpiredLine{SKU: a, Quantity: 2}) {
+	if env.Subject != order || env.Data.OrderID != order || env.Data.ReservationID != res.ID {
 		t.Errorf("event = %+v", env)
+	}
+	qty := map[string]int64{}
+	for _, l := range env.Data.Lines {
+		qty[l.SKU] = l.Quantity
+	}
+	if len(qty) != 2 || qty[a] != 2 || qty[b] != 1 {
+		t.Errorf("event lines = %+v, want %s×2 and %s×1", env.Data.Lines, a, b)
 	}
 
 	// Already expired: nothing more to do for this order.
