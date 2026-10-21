@@ -30,7 +30,7 @@ var reasons = []struct {
 
 // toStatus converts an error from the domain or store into a gRPC status. The second result is false for
 // errors the caller can do nothing about (internal errors), which the handler logs.
-func toStatus(ctx context.Context, err error) (error, bool) {
+func toStatus(err error) (error, bool) {
 	var verr *domain.ValidationError
 	var serr *domain.InsufficientStockError
 	switch {
@@ -51,9 +51,11 @@ func toStatus(ctx context.Context, err error) (error, bool) {
 		}
 		return withDetails(codes.FailedPrecondition, serr.Error(), errorInfo("INSUFFICIENT_STOCK"), detail), true
 
-	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
+	// Only the returned error decides: a database error that happens to arrive after the deadline is still
+	// an internal error and must be logged. pgx wraps context errors, so they are matched here.
+	case errors.Is(err, context.DeadlineExceeded):
 		return status.Error(codes.DeadlineExceeded, "deadline exceeded"), true
-	case errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled):
+	case errors.Is(err, context.Canceled):
 		return status.Error(codes.Canceled, "canceled"), true
 	}
 

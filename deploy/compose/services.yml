@@ -14,9 +14,10 @@ services:
       INVENTORY_ENV: local
       INVENTORY_DB_URL: postgres://${INVENTORY_DB_USER}:${INVENTORY_DB_PASSWORD}@inventory-db:5432/inventory?sslmode=disable
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    # Loopback only: SetStockLevel has no authorization until #17, so don't expose it beyond this machine.
     ports:
-      - "${INVENTORY_HTTP_PORT:-8110}:8110"
-      - "${INVENTORY_GRPC_PORT:-9110}:9110"
+      - "127.0.0.1:${INVENTORY_HTTP_PORT:-8110}:8110"
+      - "127.0.0.1:${INVENTORY_GRPC_PORT:-9110}:9110"
     depends_on:
       inventory-db: { condition: service_healthy }
       otel-collector: { condition: service_started }

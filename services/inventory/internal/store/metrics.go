@@ -24,8 +24,8 @@ type storeMetrics struct {
 	violations  metric.Int64Counter
 }
 
-func newStoreMetrics() storeMetrics {
-	meter := otel.Meter(meterName)
+func newStoreMetrics(mp metric.MeterProvider) storeMetrics {
+	meter := mp.Meter(meterName)
 	transitions, err := meter.Int64Counter("sagamart.inventory.reservation.transitions",
 		metric.WithDescription("Reservations that changed status, by new status. Idempotent repeats are not counted."))
 	if err != nil {

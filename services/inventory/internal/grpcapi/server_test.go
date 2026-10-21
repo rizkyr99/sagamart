@@ -310,3 +310,21 @@ func TestSetStockLevel(t *testing.T) {
 		t.Errorf("level = %v", l)
 	}
 }
+
+// TestReserveStockRejectsOverflowingTTL guards a review concern: a protobuf-valid duration beyond
+// time.Duration's range must not wrap into the accepted 1-30 minute window. AsDuration clamps it instead.
+func TestReserveStockRejectsOverflowingTTL(t *testing.T) {
+	for _, secs := range []int64{18446744134, 315576000000, -315576000000} {
+		store := &fakeStore{}
+		_, err := client(t, store).ReserveStock(ctx(t), &inventoryv1.ReserveStockRequest{
+			OrderId: orderID, Lines: []*inventoryv1.ReservationLine{{Sku: "KAOS-001", Quantity: 1}},
+			Ttl: &durationpb.Duration{Seconds: secs},
+		})
+		if code, _, _ := details(t, err); code != codes.InvalidArgument {
+			t.Errorf("ttl %ds: code = %v, want InvalidArgument", secs, code)
+		}
+		if store.reserveReq.OrderID != "" {
+			t.Errorf("ttl %ds reached the store", secs)
+		}
+	}
+}

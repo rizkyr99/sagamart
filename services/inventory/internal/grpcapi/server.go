@@ -151,7 +151,7 @@ func (s *Server) SetStockLevel(ctx context.Context, req *inventoryv1.SetStockLev
 
 // fail converts err to a gRPC status, logging errors the caller can't act on.
 func (s *Server) fail(ctx context.Context, rpc string, err error, attrs ...any) error {
-	st, expected := toStatus(ctx, err)
+	st, expected := toStatus(err)
 	if !expected {
 		s.log.ErrorContext(ctx, "request failed", append([]any{"rpc", rpc, "error", err}, attrs...)...)
 	}
