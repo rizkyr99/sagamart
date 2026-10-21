@@ -60,6 +60,20 @@ func newStoreMetrics(mp metric.MeterProvider, pool *pgxpool.Pool) storeMetrics {
 		})); err != nil {
 		otel.Handle(err)
 	}
+	if _, err := meter.Int64ObservableGauge("sagamart.inventory.outbox.pending",
+		metric.WithDescription("Events written but not yet published. Grows while the broker is down; alert if it stays high."),
+		metric.WithInt64Callback(func(ctx context.Context, o metric.Int64Observer) error {
+			ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			defer cancel()
+			var n int64
+			if err := pool.QueryRow(ctx, `SELECT count(*) FROM outbox WHERE published_at IS NULL`).Scan(&n); err != nil {
+				return err
+			}
+			o.Observe(n)
+			return nil
+		})); err != nil {
+		otel.Handle(err)
+	}
 	return storeMetrics{transitions: transitions, violations: violations, expiryLag: expiryLag}
 }
 

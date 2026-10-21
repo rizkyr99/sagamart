@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -23,6 +24,9 @@ type Config struct {
 	MaxLineQuantity int // RFC-0001 §4.2: a sanity limit, not a purchase policy
 	ShutdownTimeout time.Duration
 	ExpiryInterval  time.Duration // how often the expiry worker looks for due reservations
+	KafkaBrokers    []string      // Redpanda / Kafka seed brokers for the outbox relay
+	EventsTopic     string
+	OutboxInterval  time.Duration // how often the relay looks for unpublished events
 }
 
 // Load reads the configuration through getenv. version is the build version, used unless INVENTORY_VERSION is set.
@@ -88,6 +92,21 @@ func Load(getenv func(string) string, version string) (Config, error) {
 	case cfg.ExpiryInterval <= 0 || cfg.ExpiryInterval > 25*time.Second:
 		// FR-06 releases expired stock within 30 s; leave room for the run itself.
 		errs = append(errs, fmt.Errorf("INVENTORY_EXPIRY_INTERVAL must be between 0 and 25s, got %v", cfg.ExpiryInterval))
+	}
+
+	for _, b := range strings.Split(getenv("INVENTORY_KAFKA_BROKERS"), ",") {
+		if b = strings.TrimSpace(b); b != "" {
+			cfg.KafkaBrokers = append(cfg.KafkaBrokers, b)
+		}
+	}
+	if len(cfg.KafkaBrokers) == 0 {
+		errs = append(errs, errors.New("INVENTORY_KAFKA_BROKERS is required (comma-separated host:port)"))
+	}
+	cfg.EventsTopic = get("INVENTORY_EVENTS_TOPIC", "inventory.events")
+
+	cfg.OutboxInterval, err = time.ParseDuration(get("INVENTORY_OUTBOX_INTERVAL", "200ms"))
+	if err != nil || cfg.OutboxInterval <= 0 {
+		errs = append(errs, fmt.Errorf("INVENTORY_OUTBOX_INTERVAL must be a positive duration such as 200ms, got %q", getenv("INVENTORY_OUTBOX_INTERVAL")))
 	}
 
 	if len(errs) > 0 {

@@ -2,7 +2,7 @@
 
 Go service that knows what can be sold and never sells more than that. It holds stock levels per SKU and time-limited reservations for checkout. Design: [RFC-0001](../../docs/rfc/0001-inventory-reservation.md). Contract: [`sagamart.inventory.v1`](../../contracts/proto/sagamart/inventory/v1/inventory.proto).
 
-> **Status:** the gRPC API and expiry worker are live. Events are written to the outbox; the relay that publishes them to Redpanda follows (#10). `SetStockLevel` is not yet restricted to admins (#17).
+> **Status:** feature-complete for the First slice: gRPC API, expiry worker, and outbox relay publishing to `inventory.events`. Still open: `SetStockLevel` admin authorization (#17) and outbox cleanup (#20).
 
 ## Run it
 
@@ -39,9 +39,22 @@ Errors follow the contract: a status code plus a `google.rpc.ErrorInfo` (domain 
 | `sagamart_inventory_constraint_violations_total` | `constraint`; above zero means a bug |
 | `sagamart_inventory_expiry_lag_seconds` | Time from `expires_at` to the worker expiring it; FR-06 allows 30 s |
 | `sagamart_inventory_active_reservations` | Reservations holding stock now |
+| `sagamart_inventory_outbox_pending` | Events written but not yet published; grows while the broker is down |
+| `sagamart_inventory_outbox_published_total` | `type` |
+| `sagamart_inventory_outbox_lag_seconds` | Outbox write to broker acknowledgement |
+| `sagamart_inventory_outbox_failures_total` | Relay runs that failed; retried with backoff |
 | `rpc_server_call_duration_seconds` (otelgrpc) | per method and status |
 
-Every gRPC call is a span with a child span per database statement (otelpgx).
+Every gRPC call is a span with a child span per database statement (otelpgx). Each expiry starts its own trace. Every event carries the trace context of the change that produced it, in its envelope and as a `traceparent` record header.
+
+### Events
+
+Published to `inventory.events`, keyed by aggregate ID (order ID or SKU), with CloudEvents headers (`ce_id`, `ce_type`, `ce_source`, `traceparent`). Delivery is at least once; consumers deduplicate by `ce_id`. Schemas: [`contracts/events`](../../contracts/events/).
+
+| Event | When |
+|---|---|
+| `inventory.stock.adjusted/v1` | An admin set a SKU's on-hand quantity |
+| `inventory.reservation.expired/v1` | A reservation passed its TTL and its stock was released |
 
 ## Configuration
 
@@ -57,6 +70,9 @@ Environment variables, validated at startup; every problem is reported at once a
 | `INVENTORY_MIGRATE_ON_START` | `true` in local/test, else `false` | Deployments run migrations as a separate step |
 | `INVENTORY_MAX_LINE_QUANTITY` | `100` | Per-line sanity limit (RFC-0001 decision log) |
 | `INVENTORY_SHUTDOWN_TIMEOUT` | `15s` | Time to drain in-flight calls on SIGTERM |
+| `INVENTORY_KAFKA_BROKERS` | — (required) | Comma-separated `host:port`; `localhost:19092` against `make up` |
+| `INVENTORY_EVENTS_TOPIC` | `inventory.events` | Topic the outbox relay publishes to (created by `redpanda-init`) |
+| `INVENTORY_OUTBOX_INTERVAL` | `200ms` | How often the relay looks for unpublished events; backs off up to 30 s while the broker is down |
 | `INVENTORY_EXPIRY_INTERVAL` | `5s` | How often the expiry worker looks for due reservations; at most `25s`, so expired stock is back within FR-06's 30 s |
 | `INVENTORY_VERSION` | build version | Overrides the version in logs and telemetry |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | empty | e.g. `http://localhost:4317`; empty disables trace export, but logs still carry trace IDs |
@@ -72,6 +88,7 @@ Environment variables, validated at startup; every problem is reported at once a
 | `internal/store` | Postgres pool, migrations and the reservation store: each command is one transaction using conditional updates and a fixed lock order |
 | `internal/events` | Event envelopes written to the outbox; `schematest` validates them against `contracts/events` |
 | `internal/expiry` | Expiry worker: drains due reservations every interval |
+| `internal/outbox` | Outbox relay and franz-go publisher |
 | `internal/grpcapi` | `InventoryService`: request mapping, error mapping to status codes and details, reservation metrics |
 | `internal/server` | HTTP probes and metrics, gRPC server setup |
 | `migrations` | Forward-only SQL migrations, embedded in the binary |
@@ -88,10 +105,12 @@ Key suites:
 
 - `internal/domain`: the reservation transition table (`TestDecide`, one row per status, command and timing) and `TestInventoryNeverOversells`, a property-based test (`rapid`). It drives an in-memory model built from the domain rules through random reserve, commit, release, expire, stock-change and clock steps, and checks after every step that nothing is oversold, `reserved` matches the active reservations, and stock is conserved. Run it harder with `go test ./internal/domain -run NeverOversells -rapid.checks=20000`.
 - `internal/grpcapi`: through a real gRPC connection (bufconn) against a fake store: requests are normalized before the store, every domain error maps to its code and reason, `INSUFFICIENT_STOCK` and `BadRequest` details arrive intact, internal errors are not leaked, and calls stop at the caller's deadline.
+- `internal/outbox`: `TestRelayPublishesEachStateChangeOnce` runs the whole path on a real Postgres and a real Redpanda. Two stock changes and one expiry give exactly three schema-valid records, keyed by subject, in order, with no duplicates after a second run. Relay unit tests cover message mapping, draining a backlog, and recovery with backoff.
 - `internal/store` (one shared Testcontainers Postgres; each test owns its SKUs and order IDs):
   - `TestConcurrentReservationsNeverOversell`: 1,000 concurrent buyers for 100 units, exactly 100 succeed.
   - `TestConcurrentMultiLineReservationsDontDeadlock`: 300 overlapping multi-line reservations sent in random line order.
   - Retries of every command are idempotent, including 20 concurrent retries of one order.
   - Strict expiry on commit; admin stock changes with optimistic versioning; exactly one schema-valid `inventory.stock.adjusted` outbox event per successful change.
   - The `stock_never_oversold` constraint rejects every form of oversell.
+  - Outbox claims: events published once, in order; a failed publish is retried; three concurrent relays publish each event exactly once.
   - Expiry: due reservations release their stock and write one schema-valid `inventory.reservation.expired`; other reservations are untouched; expired ones are final; four concurrent workers expire 200 reservations exactly once each.

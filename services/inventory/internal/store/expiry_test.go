@@ -81,6 +81,12 @@ func TestExpireDueReleasesStockAndPublishesEvent(t *testing.T) {
 	if len(payloads) != 1 {
 		t.Fatalf("%d expired events for the order, want 1", len(payloads))
 	}
+	var traced struct {
+		TraceParent string `json:"traceparent"`
+	}
+	if err := json.Unmarshal(payloads[0], &traced); err != nil || traced.TraceParent == "" {
+		t.Errorf("expired event has no traceparent; each expiry should start its own trace: %s", payloads[0])
+	}
 	schematest.Validate(t, events.TypeReservationExpired, payloads[0])
 	var env struct {
 		Subject string                    `json:"subject"`

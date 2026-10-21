@@ -14,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/rizkyr99/sagamart/services/inventory/internal/store"
 )
@@ -27,6 +29,8 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	// As in the service (telemetry.Setup), spans are real even without an exporter, so events carry trace context.
+	otel.SetTracerProvider(sdktrace.NewTracerProvider())
 	if testing.Short() {
 		os.Exit(m.Run()) // integration tests skip themselves through needDB
 	}
