@@ -12,6 +12,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { createLogger } from '@sagamart/node-common';
 import { LoggerModule } from 'nestjs-pino';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { CatalogModule } from './catalog/catalog.module.js';
 import type { CatalogConfig } from './config.js';
 import { DynamoLifecycle, createDynamoClient } from './dynamo.js';
 import { HealthController } from './health.controller.js';
@@ -74,6 +75,7 @@ export class AppModule implements NestModule {
           // RFC-0005 §4.4: no statement runs longer than the gateway would wait.
           extra: { statement_timeout: 2000, max: 20 },
         }),
+        CatalogModule,
       ],
       controllers: [HealthController],
       providers: [

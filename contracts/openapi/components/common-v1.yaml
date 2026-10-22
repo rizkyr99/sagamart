@@ -92,7 +92,7 @@ components:
     Category:
       name: category
       in: query
-      description: Category slug.
+      description: Category slug. Includes products in its subcategories; an unknown slug gives an empty page.
       schema: { $ref: "#/components/schemas/Slug" }
     MinPrice:
       name: minPrice

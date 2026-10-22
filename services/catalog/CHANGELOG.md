@@ -6,4 +6,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Added
 
+- Browsing and price lookups (#28, RFC-0005 §4.2–4.3): categories, product listing with keyset cursors bound to their query (`newest`, `price_asc`, `price_desc`; category including subcategories; price range), product detail by slug, and `skus:lookup`. Responses are checked against `catalog-internal-v1.yaml` in tests.
 - Service skeleton (NestJS 12, ESM): zod-validated configuration, startup migrations for the RFC-0005 schema (categories, products with `active_has_price`, SKUs, idempotency keys), the DynamoDB carts table with TTL, `x-sagamart-identity` verification on every `/internal` request and `@Roles`, Problem Details for every error, `/healthz`, `/readyz`, `/metrics`, OpenTelemetry through the ESM loader hook, graceful shutdown that flushes telemetry, a Dockerfile and a Compose service.

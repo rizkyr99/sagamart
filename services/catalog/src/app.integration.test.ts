@@ -1,21 +1,17 @@
-import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 import { PassThrough } from 'node:stream';
 import { DescribeTableCommand, DescribeTimeToLiveCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Controller, Get, Req } from '@nestjs/common';
-import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { ProblemError, problem, signIdentity } from '@sagamart/node-common';
-import { PostgreSqlContainer } from '@testcontainers/postgresql';
-import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { ProblemError, problem } from '@sagamart/node-common';
 import pg from 'pg';
 import request from 'supertest';
-import { GenericContainer, Wait } from 'testcontainers';
-import type { StartedTestContainer } from 'testcontainers';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule, configureApp } from './app.module.js';
-import { loadCatalogConfig } from './config.js';
 import { Roles, identityOf } from './identity.js';
+import { startHarness, token, userId } from './testing/harness.js';
+import type { Harness } from './testing/harness.js';
 
 @Controller('internal/v1/test')
 class TestController {
@@ -42,79 +38,30 @@ class TestController {
   }
 }
 
-const keys = generateKeyPairSync('ed25519');
-const privateKey = keys.privateKey.export({ format: 'der', type: 'pkcs8' }).toString('base64');
-const publicKey = keys.publicKey.export({ format: 'der', type: 'spki' }).toString('base64');
-const kid = 'gw-test';
-const userId = '0199f2e0-0000-7000-8000-000000000001';
-
-function token(opts: { roles?: string[]; audience?: string; now?: Date; subject?: string } = {}): string {
-  return signIdentity({
-    privateKey,
-    keyId: kid,
-    audience: opts.audience ?? 'catalog',
-    roles: opts.roles ?? ['buyer'],
-    subject: opts.subject ?? userId,
-    ...(opts.now ? { now: opts.now } : {}),
-  });
-}
-
-let pgContainer: StartedPostgreSqlContainer | undefined;
-let dynamo: StartedTestContainer | undefined;
-let app: INestApplication | undefined;
-let dbUrl: string;
-let dynamoEndpoint: string;
+let h: Harness;
 
 beforeAll(async () => {
-  const [startedPg, startedDynamo] = await Promise.all([
-    new PostgreSqlContainer('postgres:17.2-alpine').withDatabase('catalog').start(),
-    new GenericContainer('amazon/dynamodb-local:2.5.2')
-      .withCommand(['-jar', 'DynamoDBLocal.jar', '-inMemory', '-sharedDb'])
-      .withExposedPorts(8000)
-      .withWaitStrategy(Wait.forListeningPorts())
-      .start(),
-  ]);
-  pgContainer = startedPg;
-  dynamo = startedDynamo;
-  dbUrl = startedPg.getConnectionUri();
-  dynamoEndpoint = `http://${startedDynamo.getHost()}:${String(startedDynamo.getMappedPort(8000))}`;
-
-  const config = loadCatalogConfig({
-    CATALOG_ENV: 'test',
-    CATALOG_DB_URL: dbUrl,
-    CATALOG_DYNAMODB_ENDPOINT: dynamoEndpoint,
-    CATALOG_IDENTITY_PUBLIC_KEYS: JSON.stringify({ [kid]: publicKey }),
-  });
-  const moduleRef = await Test.createTestingModule({
-    imports: [
-      AppModule.forRoot({
-        config,
-        logDestination: new PassThrough(),
-        metricsHandler: (_req, res) => {
-          res.setHeader('content-type', 'text/plain; version=0.0.4');
-          res.end('sagamart_catalog_test_total 1\n');
-        },
-      }),
-    ],
+  h = await startHarness({
     controllers: [TestController],
-  }).compile();
-  const created = moduleRef.createNestApplication();
-  configureApp(created);
-  await created.init();
-  app = created;
+    app: {
+      metricsHandler: (_req, res) => {
+        res.setHeader('content-type', 'text/plain; version=0.0.4');
+        res.end('sagamart_catalog_test_total 1\n');
+      },
+    },
+  });
+});
+
+afterAll(async () => {
+  await h.close();
 });
 
 /** The app's HTTP server, for supertest. */
-const http = (): Server => app!.getHttpServer() as Server;
-
-afterAll(async () => {
-  await app?.close();
-  await Promise.all([pgContainer?.stop(), dynamo?.stop()]);
-});
+const http = () => h.http();
 
 describe('startup', () => {
   it('runs the migrations: RFC-0005 tables and constraints', async () => {
-    const client = new pg.Client({ connectionString: dbUrl });
+    const client = new pg.Client({ connectionString: h.dbUrl });
     await client.connect();
     try {
       const { rows } = await client.query<{ table_name: string }>(
@@ -138,7 +85,7 @@ describe('startup', () => {
 
   it('creates the carts table with TTL on the ttl attribute (ADR-0009)', async () => {
     const ddb = new DynamoDBClient({
-      endpoint: dynamoEndpoint,
+      endpoint: h.dynamoEndpoint,
       region: 'ap-southeast-3',
       credentials: { accessKeyId: 'local', secretAccessKey: 'local' },
     });
@@ -159,13 +106,10 @@ describe('probes and metrics', () => {
 
   it('reports an unready dependency without revealing hosts, ports or table names', async () => {
     // Nothing listens on this port: DynamoDB is unreachable, so the service is not ready.
-    const config = loadCatalogConfig({
-      CATALOG_ENV: 'test',
-      CATALOG_DB_URL: dbUrl,
+    const config = h.config({
       CATALOG_DYNAMODB_ENDPOINT: 'http://127.0.0.1:1',
       CATALOG_DYNAMODB_CREATE_TABLE: 'false',
       CATALOG_CARTS_TABLE: 'secret-table-name',
-      CATALOG_IDENTITY_PUBLIC_KEYS: JSON.stringify({ [kid]: publicKey }),
     });
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot({ config, logDestination: new PassThrough() })],
