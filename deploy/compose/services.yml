@@ -15,7 +15,8 @@ services:
       INVENTORY_DB_URL: postgres://${INVENTORY_DB_USER}:${INVENTORY_DB_PASSWORD}@inventory-db:5432/inventory?sslmode=disable
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       INVENTORY_KAFKA_BROKERS: redpanda:9092
-    # Loopback only: SetStockLevel has no authorization until #17, so don't expose it beyond this machine.
+      INVENTORY_IDENTITY_PUBLIC_KEYS: ${IDENTITY_PUBLIC_KEYS:?run make identity-keys}
+    # Loopback only: the saga RPCs get their service identity in RFC-0002; until then, keep them off the network.
     ports:
       - "127.0.0.1:${INVENTORY_HTTP_PORT:-8110}:8110"
       - "127.0.0.1:${INVENTORY_GRPC_PORT:-9110}:9110"

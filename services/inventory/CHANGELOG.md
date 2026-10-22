@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Added
 
+- Identity checks (#17, contracts/identity.md): `SetStockLevel` requires the gateway's signed `x-sagamart-identity` with the `admin` role, and `GetStockLevels` any valid identity; otherwise `UNAUTHENTICATED` or `PERMISSION_DENIED`. Ed25519 verification in `internal/identity`, `INVENTORY_IDENTITY_PUBLIC_KEYS` (required), and a rejection counter by reason. The saga RPCs are unchanged until RFC-0002.
 - Service skeleton: environment configuration validated at startup, JSON logs with trace IDs, OpenTelemetry tracing and Prometheus metrics, `/healthz`, `/readyz` and `/metrics`, gRPC server with health and reflection, graceful shutdown.
 - First migration: `stock_levels` with the `stock_never_oversold` constraint, `reservations`, `reservation_lines` and `outbox` (RFC-0001 §4.3).
 - Domain rules (`internal/domain`), written test-first: request validation and normalisation, the reservation status transition table with strict expiry, all-or-nothing stock reservation, and optimistic admin stock changes. A property-based test checks the no-oversell invariants over random command sequences.

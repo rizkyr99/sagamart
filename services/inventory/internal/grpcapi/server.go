@@ -39,7 +39,7 @@ type Server struct {
 }
 
 // New returns a Server.
-// TODO(#17): SetStockLevel must check the admin role from the gateway's signed identity header (RFC-0001 §8).
+// Authorization (SetStockLevel needs the admin role) is IdentityInterceptor's job, installed on the gRPC server.
 func New(store Store, limits domain.Limits, log *slog.Logger) *Server {
 	return &Server{store: store, limits: limits, log: log, metrics: newMetrics()}
 }

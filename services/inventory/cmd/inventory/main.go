@@ -24,6 +24,7 @@ import (
 	"github.com/rizkyr99/sagamart/services/inventory/internal/domain"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/expiry"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/grpcapi"
+	"github.com/rizkyr99/sagamart/services/inventory/internal/identity"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/outbox"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/server"
 	"github.com/rizkyr99/sagamart/services/inventory/internal/store"
@@ -102,7 +103,11 @@ func run(ctx context.Context) error {
 	defer pool.Close()
 
 	reservations := store.New(pool)
-	grpcSrv, health := server.NewGRPCServer(cfg.Env)
+	verifier, err := identity.NewVerifier(cfg.IdentityPublicKeys, "inventory")
+	if err != nil {
+		return fmt.Errorf("INVENTORY_IDENTITY_PUBLIC_KEYS: %w", err)
+	}
+	grpcSrv, health := server.NewGRPCServer(cfg.Env, grpcapi.IdentityInterceptor(verifier, log))
 	inventoryv1.RegisterInventoryServiceServer(grpcSrv,
 		grpcapi.New(reservations, domain.NewLimits(cfg.MaxLineQuantity), log))
 	httpSrv := &http.Server{

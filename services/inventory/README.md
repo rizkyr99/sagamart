@@ -2,7 +2,7 @@
 
 Go service that knows what can be sold and never sells more than that. It holds stock levels per SKU and time-limited reservations for checkout. Design: [RFC-0001](../../docs/rfc/0001-inventory-reservation.md). Contract: [`sagamart.inventory.v1`](../../contracts/proto/sagamart/inventory/v1/inventory.proto).
 
-> **Status:** feature-complete for the First slice: gRPC API, expiry worker, and outbox relay publishing to `inventory.events`. Still open: `SetStockLevel` admin authorization (#17) and outbox cleanup (#20).
+> **Status:** feature-complete for the First slice: gRPC API, expiry worker, and outbox relay publishing to `inventory.events`. `SetStockLevel` and `GetStockLevels` require the gateway's signed identity (#17). Still open: outbox cleanup (#20).
 
 ## Run it
 
@@ -22,11 +22,20 @@ Or run the built image with everything else: `make demo` from the repo root.
 
 ```bash
 S=sagamart.inventory.v1.InventoryService
-grpcurl -plaintext -d '{"sku":"KAOS-001","onHand":5}' localhost:9110 $S/SetStockLevel
+ID="$(../../deploy/k6/admin-identity.sh)"   # an admin x-sagamart-identity signed with the local key (60 s)
+grpcurl -plaintext -H "x-sagamart-identity: $ID" -d '{"sku":"KAOS-001","onHand":5}' localhost:9110 $S/SetStockLevel
 grpcurl -plaintext -d '{"orderId":"0199f2c0-0000-7000-8000-000000000001","lines":[{"sku":"KAOS-001","quantity":3}]}' localhost:9110 $S/ReserveStock
 grpcurl -plaintext -d '{"orderId":"0199f2c0-0000-7000-8000-000000000001"}' localhost:9110 $S/CommitReservation
-grpcurl -plaintext -d '{"skus":["KAOS-001"]}' localhost:9110 $S/GetStockLevels
+grpcurl -plaintext -H "x-sagamart-identity: $ID" -d '{"skus":["KAOS-001"]}' localhost:9110 $S/GetStockLevels
 ```
+
+**Identity** ([contract](../../contracts/identity.md)):
+
+- `IdentityInterceptor` verifies `x-sagamart-identity` on the RPCs the gateway calls. It checks the EdDSA signature by a trusted `kid`, the issuer, `aud: "inventory"`, and expiry with 5 s of skew.
+- `GetStockLevels` needs any valid identity (the gateway signs one for guests too), and `SetStockLevel` needs the `admin` role.
+- A missing or invalid identity is `UNAUTHENTICATED`, a missing role `PERMISSION_DENIED`, each with an `ErrorInfo` reason.
+- Rejections are logged with the reason, never the token, and counted.
+- The saga RPCs (`ReserveStock`, `CommitReservation`, `ReleaseReservation`) are unchanged until RFC-0002 gives Order a service identity. Until then, Compose binds the gRPC port to loopback only.
 
 Errors follow the contract: a status code plus a `google.rpc.ErrorInfo` (domain `inventory.sagamart.dev`, reason such as `INSUFFICIENT_STOCK`). `INSUFFICIENT_STOCK` also carries an `InsufficientStockDetail`, and invalid requests carry a `google.rpc.BadRequest` naming each field.
 
@@ -37,6 +46,7 @@ Errors follow the contract: a status code plus a `google.rpc.ErrorInfo` (domain 
 | `sagamart_inventory_reservations_total`, `sagamart_inventory_reservation_duration_seconds` | `result`: `reserved`, `insufficient_stock`, `conflict`, `invalid`, `error` |
 | `sagamart_inventory_reservation_transitions_total` | `to`: `COMMITTED`, `RELEASED`, `EXPIRED` (repeats are not counted) |
 | `sagamart_inventory_constraint_violations_total` | `constraint`; above zero means a bug |
+| `sagamart_inventory_identity_rejections_total` | `reason`: `MISSING`, `MALFORMED`, `BAD_HEADER`, `UNKNOWN_KEY`, `BAD_SIGNATURE`, `BAD_CLAIMS`, `EXPIRED`, `NOT_YET_VALID`, `MISSING_ROLE` |
 | `sagamart_inventory_expiry_lag_seconds` | Time from `expires_at` to the worker expiring it; FR-06 allows 30 s |
 | `sagamart_inventory_active_reservations` | Reservations holding stock now |
 | `sagamart_inventory_outbox_pending` | Events written but not yet published; grows while the broker is down |
@@ -70,6 +80,7 @@ Environment variables, validated at startup; every problem is reported at once a
 | `INVENTORY_MIGRATE_ON_START` | `true` in local/test, else `false` | Deployments run migrations as a separate step |
 | `INVENTORY_MAX_LINE_QUANTITY` | `100` | Per-line sanity limit (RFC-0001 decision log) |
 | `INVENTORY_SHUTDOWN_TIMEOUT` | `15s` | Time to drain in-flight calls on SIGTERM |
+| `INVENTORY_IDENTITY_PUBLIC_KEYS` | — (required) | Trusted gateway keys, JSON `{"<kid>": "<SPKI DER, base64>"}`; `IDENTITY_PUBLIC_KEYS` from `make identity-keys` |
 | `INVENTORY_KAFKA_BROKERS` | — (required) | Comma-separated `host:port`; `localhost:19092` against `make up` |
 | `INVENTORY_EVENTS_TOPIC` | `inventory.events` | Topic the outbox relay publishes to (created by `redpanda-init`) |
 | `INVENTORY_OUTBOX_INTERVAL` | `200ms` | How often the relay looks for unpublished events; backs off up to 30 s while the broker is down |
@@ -83,6 +94,7 @@ Environment variables, validated at startup; every problem is reported at once a
 |---|---|
 | `cmd/inventory` | Entry point: wiring, servers, graceful shutdown, `healthcheck` command |
 | `internal/config` | Environment configuration |
+| `internal/identity` | Verifies the gateway's signed identity (contracts/identity.md); tested against a token signed by the gateway's own code |
 | `internal/domain` | Pure reservation rules: request validation, the status transition table, stock arithmetic. No I/O |
 | `internal/telemetry` | Logger (conventions §7), OpenTelemetry tracing and metrics |
 | `internal/store` | Postgres pool, migrations and the reservation store: each command is one transaction using conditional updates and a fixed lock order |

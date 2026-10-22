@@ -35,10 +35,20 @@ export function orderId() {
   return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
 }
 
+// adminCall is call() with the gateway's signed identity, which SetStockLevel and GetStockLevels require (#17).
+// Pass one from admin-identity.sh as INVENTORY_ADMIN_IDENTITY; it is valid for 60 s, enough for setup and a
+// short run's teardown.
+export function adminCall(method, req) {
+  const identity = __ENV.INVENTORY_ADMIN_IDENTITY;
+  if (!identity) throw new Error('set INVENTORY_ADMIN_IDENTITY: -e INVENTORY_ADMIN_IDENTITY="$(deploy/k6/admin-identity.sh)"');
+  ensureConnected();
+  return client.invoke(`${SERVICE}/${method}`, req, { timeout: '10s', metadata: { 'x-sagamart-identity': identity } });
+}
+
 // seed creates SKUs with the given on-hand quantity, failing loudly if Inventory refuses.
 export function seed(skus, onHand) {
   for (const sku of skus) {
-    const res = call('SetStockLevel', { sku, onHand, expectedVersion: 0 });
+    const res = adminCall('SetStockLevel', { sku, onHand, expectedVersion: 0 });
     if (res.status !== grpc.StatusOK) {
       throw new Error(`seed ${sku}: ${res.status} ${res.error && res.error.message}`);
     }

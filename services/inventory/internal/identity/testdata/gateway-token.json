@@ -1,0 +1,7 @@
+{
+  "comment": "Signed by @sagamart/node-common signIdentity (the gateway). Test-only key; regenerate freely.",
+  "kid": "gw-fixture",
+  "publicKey": "MCowBQYDK2VwAyEActtKhwkQPslMW+Z3CThVsCZeA9IGZmzJDnIsc/fuzlU=",
+  "signedAt": "2026-10-22T03:00:00.000Z",
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InNhZ2FtYXJ0LWlkZW50aXR5K2p3dCIsImtpZCI6Imd3LWZpeHR1cmUifQ.eyJpc3MiOiJnYXRld2F5IiwiYXVkIjoiaW52ZW50b3J5Iiwic3ViIjoiMDE5OWYyZTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDBhMDAxIiwicm9sZXMiOlsiYWRtaW4iXSwiaWF0IjoxNzkyNjM4MDAwLCJleHAiOjE3OTI2MzgwNjAsImp0aSI6ImY2YjkyMzg4LWM4NTItNDYwZC04ZDBkLTY5NjdhMTEwNTUyOCJ9.6Cn0EWQjpyS3zFG7jY0lZvN6AzSGBd_FAS5hKLqDSu0uX-nmP_uxps2jQMh7gDqbkZdXV0ucpMjFwiDOqGz-Aw"
+}

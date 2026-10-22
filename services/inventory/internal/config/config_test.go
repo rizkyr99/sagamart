@@ -16,27 +16,29 @@ func env(kv map[string]string) func(string) string {
 
 func TestLoadDefaults(t *testing.T) {
 	cfg, err := config.Load(env(map[string]string{
-		"INVENTORY_DB_URL":        "postgres://u:p@localhost:5436/inventory",
-		"INVENTORY_KAFKA_BROKERS": "localhost:19092",
+		"INVENTORY_DB_URL":               "postgres://u:p@localhost:5436/inventory",
+		"INVENTORY_KAFKA_BROKERS":        "localhost:19092",
+		"INVENTORY_IDENTITY_PUBLIC_KEYS": `{"gw-1":"MCowBQYDK2VwAyEAEZsYDunQ2v5N1vB2MmXsfISRzGR51GbiQCeC7AoQooA="}`,
 	}), "1.2.3")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 
 	want := config.Config{
-		Env:             "local",
-		Version:         "1.2.3",
-		LogLevel:        slog.LevelInfo,
-		DatabaseURL:     "postgres://u:p@localhost:5436/inventory",
-		HTTPAddr:        ":8110",
-		GRPCAddr:        ":9110",
-		MigrateOnStart:  true,
-		MaxLineQuantity: 100,
-		ShutdownTimeout: 15 * time.Second,
-		ExpiryInterval:  5 * time.Second,
-		KafkaBrokers:    []string{"localhost:19092"},
-		EventsTopic:     "inventory.events",
-		OutboxInterval:  200 * time.Millisecond,
+		Env:                "local",
+		Version:            "1.2.3",
+		LogLevel:           slog.LevelInfo,
+		DatabaseURL:        "postgres://u:p@localhost:5436/inventory",
+		HTTPAddr:           ":8110",
+		GRPCAddr:           ":9110",
+		MigrateOnStart:     true,
+		MaxLineQuantity:    100,
+		ShutdownTimeout:    15 * time.Second,
+		ExpiryInterval:     5 * time.Second,
+		KafkaBrokers:       []string{"localhost:19092"},
+		EventsTopic:        "inventory.events",
+		OutboxInterval:     200 * time.Millisecond,
+		IdentityPublicKeys: map[string]string{"gw-1": "MCowBQYDK2VwAyEAEZsYDunQ2v5N1vB2MmXsfISRzGR51GbiQCeC7AoQooA="},
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("Load defaults:\n got %+v\nwant %+v", cfg, want)
@@ -45,18 +47,19 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadOverrides(t *testing.T) {
 	cfg, err := config.Load(env(map[string]string{
-		"INVENTORY_ENV":               "prod",
-		"INVENTORY_VERSION":           "abc123",
-		"INVENTORY_LOG_LEVEL":         "debug",
-		"INVENTORY_DB_URL":            "postgres://db/inventory",
-		"INVENTORY_HTTP_ADDR":         ":18110",
-		"INVENTORY_GRPC_ADDR":         ":19110",
-		"INVENTORY_MAX_LINE_QUANTITY": "10",
-		"INVENTORY_SHUTDOWN_TIMEOUT":  "5s",
-		"OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel-collector:4317",
-		"INVENTORY_KAFKA_BROKERS":     " redpanda-0:9092, redpanda-1:9092 ,",
-		"INVENTORY_EVENTS_TOPIC":      "inventory.events.v2",
-		"INVENTORY_OUTBOX_INTERVAL":   "1s",
+		"INVENTORY_ENV":                  "prod",
+		"INVENTORY_VERSION":              "abc123",
+		"INVENTORY_LOG_LEVEL":            "debug",
+		"INVENTORY_DB_URL":               "postgres://db/inventory",
+		"INVENTORY_HTTP_ADDR":            ":18110",
+		"INVENTORY_GRPC_ADDR":            ":19110",
+		"INVENTORY_MAX_LINE_QUANTITY":    "10",
+		"INVENTORY_SHUTDOWN_TIMEOUT":     "5s",
+		"OTEL_EXPORTER_OTLP_ENDPOINT":    "http://otel-collector:4317",
+		"INVENTORY_KAFKA_BROKERS":        " redpanda-0:9092, redpanda-1:9092 ,",
+		"INVENTORY_IDENTITY_PUBLIC_KEYS": `{"gw-1":"MCowBQYDK2VwAyEAEZsYDunQ2v5N1vB2MmXsfISRzGR51GbiQCeC7AoQooA="}`,
+		"INVENTORY_EVENTS_TOPIC":         "inventory.events.v2",
+		"INVENTORY_OUTBOX_INTERVAL":      "1s",
 	}), "dev")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -77,10 +80,11 @@ func TestLoadOverrides(t *testing.T) {
 
 func TestLoadMigrateOnStartExplicit(t *testing.T) {
 	cfg, err := config.Load(env(map[string]string{
-		"INVENTORY_ENV":              "prod",
-		"INVENTORY_DB_URL":           "postgres://db/inventory",
-		"INVENTORY_KAFKA_BROKERS":    "redpanda:9092",
-		"INVENTORY_MIGRATE_ON_START": "true",
+		"INVENTORY_ENV":                  "prod",
+		"INVENTORY_DB_URL":               "postgres://db/inventory",
+		"INVENTORY_KAFKA_BROKERS":        "redpanda:9092",
+		"INVENTORY_IDENTITY_PUBLIC_KEYS": `{"gw-1":"MCowBQYDK2VwAyEAEZsYDunQ2v5N1vB2MmXsfISRzGR51GbiQCeC7AoQooA="}`,
+		"INVENTORY_MIGRATE_ON_START":     "true",
 	}), "dev")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -109,6 +113,9 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		{"missing brokers", map[string]string{"INVENTORY_DB_URL": "postgres://db"}, "INVENTORY_KAFKA_BROKERS is required"},
 		{"blank brokers", map[string]string{"INVENTORY_KAFKA_BROKERS": " , "}, "INVENTORY_KAFKA_BROKERS is required"},
 		{"bad outbox interval", map[string]string{"INVENTORY_OUTBOX_INTERVAL": "soon"}, "INVENTORY_OUTBOX_INTERVAL"},
+		{"missing identity keys", map[string]string{}, "INVENTORY_IDENTITY_PUBLIC_KEYS is required"},
+		{"identity keys not JSON", map[string]string{"INVENTORY_IDENTITY_PUBLIC_KEYS": "gw-1=abc"}, "INVENTORY_IDENTITY_PUBLIC_KEYS"},
+		{"no identity keys", map[string]string{"INVENTORY_IDENTITY_PUBLIC_KEYS": "{}"}, "INVENTORY_IDENTITY_PUBLIC_KEYS"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

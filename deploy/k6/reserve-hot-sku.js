@@ -3,7 +3,7 @@
 //
 //   docker run --rm --network host -v "$PWD:/work" -w /work/deploy/k6 grafana/k6:1.8.2 run reserve-hot-sku.js
 import { Counter } from 'k6/metrics';
-import { call, close, grpc, orderId, seed } from './lib/inventory.js';
+import { adminCall, call, close, grpc, orderId, seed } from './lib/inventory.js';
 
 const ATTEMPTS = Number(__ENV.ATTEMPTS || 5000);
 const VUS = Number(__ENV.VUS || 500);
@@ -42,7 +42,7 @@ export default function (data) {
 }
 
 export function teardown(data) {
-  const res = call('GetStockLevels', { skus: [data.sku] });
+  const res = adminCall('GetStockLevels', { skus: [data.sku] });
   console.log(`final level for ${data.sku}: ${JSON.stringify(res.message)}`);
   close();
 }
