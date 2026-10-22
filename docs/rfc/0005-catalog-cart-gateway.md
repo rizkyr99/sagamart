@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-Build the two NestJS services that complete the First slice: **Catalog + Cart** (products, SKUs, categories, prices and carts) and the **API Gateway / BFF** (the public REST API, development authentication, the signed internal identity, rate limiting and idempotency). Together with Inventory they give a working browse → product detail with live stock → cart API, plus admin product and stock management.
+Build the two NestJS services that complete the First slice: **Catalog + Cart** (products, SKUs, categories, prices and carts) and the **API Gateway / BFF** (the public REST API, development authentication, the signed internal identity and rate limiting). Together with Inventory they give a working browse → product detail with live stock → cart API, plus admin product and stock management.
 
 ## 2. Motivation
 
@@ -29,7 +29,7 @@ The MVP requires FR-01 (list and filter products), FR-03 (product detail with li
 
 **Non-goals**
 
-- Full-text search (FR-02, Core complete) and catalog events for the search indexer (Stage 3, RFC-0003).
+- Full-text search (FR-02, Core complete) and catalog events for the search indexer (Stage 3, RFC-0003). There is no search index before then, so nothing can go stale. But the Catalog → Search relationship in the context map can only be event-driven from RFC-0003 on, so RFC-0003 must start with a backfill: Catalog republishes its current state, or the indexer reads the internal API once.
 - Merging a guest cart on sign-in (FR-05, Core complete).
 - Real OIDC (Core complete); a development JWT stands in, as the PRD allows.
 - Checkout (Stage 2, RFC-0002) and the web app (`apps/web`).
@@ -45,7 +45,6 @@ flowchart LR
     subgraph gw[API Gateway / BFF — NestJS]
         auth[Auth: verify JWT,<br/>sign internal identity]
         rl[Rate limit<br/>token bucket]
-        idem[Idempotency-Key<br/>store]
         compose[Compose responses]
     end
     gw -->|REST /internal/v1<br/>x-sagamart-identity| cat
@@ -57,7 +56,7 @@ flowchart LR
     end
     catalog --- pg[(Postgres: catalog)]
     cart --- ddb[(DynamoDB: carts)]
-    gw --- redis[(Redis: rate limits,<br/>idempotency keys)]
+    gw --- redis[(Redis: rate limits)]
 ```
 
 - **The gateway is a BFF, not a proxy.** It owns no business data, but it composes responses: product and cart views merge Catalog data with Inventory availability, so the browser makes one call per screen.
@@ -75,19 +74,20 @@ All contracts are written in `contracts/` **before** the code (development proce
 | `GET /v1/categories` | anyone | Category tree |
 | `GET /v1/products?category=&minPrice=&maxPrice=&sort=&limit=&cursor=` | anyone | FR-01. `sort` is `newest` (default), `price_asc` or `price_desc`; `limit` 1–50 (default 20); opaque `cursor`, `nextCursor` null at the end. Each item has a product-level `stockStatus`. |
 | `GET /v1/products/{slug}` | anyone | FR-03. Product with its SKUs; each SKU has `price`, `available` and `stockStatus` (`IN_STOCK`, `LOW_STOCK` at ≤ 5, `OUT_OF_STOCK`, or `UNKNOWN` when Inventory didn't answer in time) |
+| `POST /v1/cart/guest-token` | anyone | Returns a new guest cart token. **Writes nothing**: the cart is created by the first `PUT` that carries the token, so a lost response costs nothing and a retry just gets another token. |
 | `GET /v1/cart` | buyer or guest | FR-04. The current cart: lines with `quantity`, `priceSnapshot`, current `price`, `priceChanged`, `available`, `exceedsAvailable`, and a `total` |
 | `PUT /v1/cart/lines/{sku}` `{ "quantity": n }` | buyer or guest | Set a line's quantity, adding the line if needed; `0` removes it. Idempotent by method, so no `Idempotency-Key`. |
 | `DELETE /v1/cart/lines/{sku}` | buyer or guest | Remove a line |
-| `POST /v1/admin/products` | admin | Create a product with its SKUs (`Idempotency-Key` required) |
+| `POST /v1/admin/products` | admin | Create a product with its SKUs, at most 100 (`Idempotency-Key` required; enforced by Catalog, §4.4) |
 | `PATCH /v1/admin/products/{id}` | admin | Edit fields; `If-Match: "<version>"` required, `412` on a stale version |
 | `POST /v1/admin/products/{id}/skus` | admin | Add a variant (`Idempotency-Key` required) |
 | `PATCH /v1/admin/skus/{sku}` | admin | Change a variant's price or name; `If-Match` required |
-| `PUT /v1/admin/skus/{sku}/stock` `{ "onHand": n, "expectedVersion": v }` | admin | FR-11. Calls Inventory `SetStockLevel`; Inventory's `VERSION_CONFLICT` becomes `409` |
-| `POST /v1/dev/token` `{ "role": "buyer" \| "admin", "userId"? }` | anyone, **dev only** | Issues a development JWT. Exists only when `GATEWAY_DEV_AUTH=true`, and the gateway refuses to start with it in `prod`. |
+| `PUT /v1/admin/skus/{sku}/stock` `{ "onHand": n, "expectedVersion": v }` | admin | FR-11. Calls Inventory `SetStockLevel`. Both of Inventory's precondition failures (inventory contract) become `409` Problem Details with `code` `VERSION_CONFLICT` or `STOCK_BELOW_RESERVED`. The gateway then reads the level and adds `currentVersion`, `onHand` and `reserved`, so the admin can retry correctly. Invalid input is `400`. |
+| `POST /v1/dev/token` `{ "role": "buyer" \| "admin", "userId" }` | anyone, **dev only** | Issues a development JWT. `userId` (a UUID) is required, so every token has a `sub`. Guests need no token. Exists only when `GATEWAY_DEV_AUTH=true`, and the gateway refuses to start with it in `prod`. |
 
-**Guest carts.** `GET /v1/cart` without a cart creates nothing. The first `PUT` from a guest creates the cart and returns an `X-Cart-Token` response header: 128 random bits, base64url. The client sends it back on later cart calls. Signed-in buyers' carts are keyed by user ID and need no token.
+**Guest carts.** A guest first asks `POST /v1/cart/guest-token` for a token (128 random bits, base64url), then sends it as `X-Cart-Token` on every cart call. Because the token exists before any cart write, every write is retry-safe: repeating a `PUT` sets the same quantity on the same cart. `GET /v1/cart` with an unknown or expired token returns an empty cart. Signed-in buyers' carts are keyed by user ID and need no token.
 
-**Internal Catalog API** — `contracts/openapi/catalog-internal-v1.yaml`, under `/internal/v1`, reachable only on the internal network. It mirrors the public operations without composition: `products`, `products/{slug}`, `categories`, `skus:lookup` (prices and names for up to 100 SKUs; Order will use it in Stage 2), `carts/{cartKey}`, `carts/{cartKey}/lines/{sku}`, and the admin writes.
+**Internal Catalog API** — `contracts/openapi/catalog-internal-v1.yaml`, under `/internal/v1`, reachable only on the internal network. It mirrors the public operations without composition: `products`, `products/{slug}`, `categories`, `skus:lookup` (prices and names for up to 100 SKUs; Order will use it in Stage 2), `carts/{cartKey}`, `carts/{cartKey}/lines/{sku}`, and the admin writes. Admin `POST`s require `Idempotency-Key`, which Catalog enforces itself (§4.4).
 
 **Internal identity** — `contracts/identity.md`, a new contract. The gateway authenticates the caller, then sends every internal request with:
 
@@ -123,6 +123,7 @@ CREATE TABLE products (
     image_urls   TEXT[] NOT NULL DEFAULT '{}',
     status       TEXT NOT NULL CHECK (status IN ('DRAFT', 'ACTIVE', 'ARCHIVED')),
     min_price    BIGINT,          -- lowest active SKU price, maintained with SKU writes; drives price filter and sort
+    CONSTRAINT active_has_price CHECK (status <> 'ACTIVE' OR min_price IS NOT NULL),
     version      INT NOT NULL DEFAULT 1,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -144,22 +145,40 @@ CREATE TABLE skus (
 CREATE INDEX skus_by_product ON skus (product_id);
 ```
 
-- **Cursors** are opaque base64url of the sort key plus `id` (for example `{"s":"newest","t":"2026-10-22T...","id":"..."}`). They use keyset pagination, so pages stay stable while products are added. A cursor from a different sort or filter is rejected with `400`.
+- **Cursors** are opaque base64url of the position plus a fingerprint of the query: for example `{"q":"<hash>","t":"2026-10-22T...","id":"..."}`, where `q` is a SHA-256 prefix of the normalised `sort`, `category`, `minPrice` and `maxPrice`. They use keyset pagination, so pages stay stable while products are added. A cursor whose `q` doesn't match the request's query is rejected with `400` `CURSOR_MISMATCH`.
+- **Active products always have a price:** a product can become `ACTIVE` only with at least one active SKU, and archiving its last active SKU is rejected (`422`). The `active_has_price` constraint backs this up, so price filters and sorts never meet a NULL.
+- **At most 100 SKUs per product**, so one product's stock always fits in a single `GetStockLevels` call (the inventory contract's limit).
 - **SKU codes** follow the conventions for Inventory SKUs (≤ 64 characters, no whitespace). Creating a SKU in Catalog does not create stock; stock starts when an admin sets it.
 
-**Cart — DynamoDB** (`carts` table, ADR-0007 single-table design):
+**Cart — DynamoDB** (`carts` table). Each cart is **one item** ([ADR-0009](../adr/0009-cart-as-single-item.md), refining ADR-0007's layout):
 
-| PK | SK | Attributes |
-|---|---|---|
-| `CART#<cartKey>` | `META` | `ownerType` (`user` or `guest`), `updatedAt`, `ttl` |
-| `CART#<cartKey>` | `LINE#<sku>` | `quantity`, `priceSnapshot`, `addedAt` |
+| PK | Attributes |
+|---|---|
+| `CART#<cartKey>` | `ownerType` (`user` or `guest`), `lines` (a map of SKU → `{quantity, priceSnapshot, addedAt}`), `version`, `updatedAt`, `ttl` |
 
 - **Cart keys:** `cartKey` is `user:<userId>`, or `guest:<sha256(token)>` so a leaked table never exposes guest tokens.
-- **TTL:** every write refreshes `ttl` (now + 7 days) on `META` and the touched line in one `TransactWriteItems`. DynamoDB's TTL deletes expired items; reads also treat `ttl < now` as absent, because TTL deletion is lazy.
-- **Limits:** at most 50 lines per cart (a condition on a line counter in `META`), quantity 1–100 per line.
+- **TTL:** every write sets `ttl` to now + 7 days on the one item, so the whole cart expires together. A line can never outlive or predecease its cart. DynamoDB's TTL deletes expired items; reads also treat `ttl < now` as absent, because TTL deletion is lazy.
+- **Writes** are conditional on `version` (optimistic concurrency) and retried a few times on conflict.
+- **Limits:** at most 50 lines per cart, quantity 1–100 per line. A full cart is far below DynamoDB's 400 KB item limit.
 - **Price snapshot:** written when a line is added or its quantity changes, from Catalog's current price. The authoritative price is re-read at checkout (context map).
 
-**Gateway — Redis:** rate-limit buckets and idempotency records only. Nothing durable.
+**Catalog — idempotency records** in Postgres, written in the same transaction as the operation they protect:
+
+```sql
+CREATE TABLE idempotency_keys (
+    owner        TEXT NOT NULL,          -- the identity's sub
+    key          TEXT NOT NULL,          -- the Idempotency-Key header
+    request_hash TEXT NOT NULL,          -- SHA-256 of method, route and canonical body
+    status       INT NOT NULL,
+    response     JSONB NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (owner, key)
+);
+```
+
+Rows older than 24 hours are deleted by a periodic job (conventions §4).
+
+**Gateway — Redis:** rate-limit buckets only. Nothing durable.
 
 ### 4.4 Key flows
 
@@ -184,18 +203,21 @@ sequenceDiagram
     G-->>B: 200 product with price and stock per SKU
 ```
 
-**Product list (FR-01):** the same shape. Catalog returns the page, and the gateway asks Inventory for all of the page's SKUs in one `GetStockLevels` call (a page of ≤ 50 products is capped at 100 SKUs; any extra SKUs go in a second call). A product's `stockStatus` is the best of its SKUs'.
+**Product list (FR-01):** the same shape. Catalog returns the page, and the gateway asks Inventory for the page's SKUs in batches of 100, sent in parallel under the one 150 ms deadline. A batch that fails or times out marks only *its* SKUs `UNKNOWN`.
+
+**Stock status.** A SKU is `OUT_OF_STOCK` at 0 available, `LOW_STOCK` at 1–5, `IN_STOCK` above 5, and `UNKNOWN` if Inventory didn't answer for it (or doesn't know the SKU). A product takes the best known status in the order `IN_STOCK` > `LOW_STOCK` > `OUT_OF_STOCK`. It is `UNKNOWN` only if none of its SKUs is known to be available and at least one is `UNKNOWN`, because an unknown SKU might be in stock.
 
 **Cart view (J2):** Catalog returns the cart lines with current prices from the Catalog module in the same process, and the gateway adds availability. A line gets `priceChanged` when the current price differs from the snapshot, and `exceedsAvailable` when its quantity is above what's available. Nothing is reserved until checkout (Stage 2).
 
 **Admin stock change (FR-11):** the gateway checks the admin role, then calls Inventory's `SetStockLevel` with the identity in gRPC metadata. Inventory checks the role again (#17).
 
-**Idempotent admin writes:** for `POST` with an `Idempotency-Key`:
+**Idempotent admin writes.** The gateway forwards `Idempotency-Key`, and **Catalog, the owner of the write, enforces it** in the same Postgres transaction as the write:
 
-1. The gateway stores `{status, headers, body}` in Redis under `idem:<userId>:<route>:<key>` for 24 hours (conventions §4).
-2. A retry with the same key and the same request body gets the stored response.
-3. The same key with a different body gets `422`.
-4. A retry while the first request is still running gets `409`, enforced by a `SET NX` lock.
+1. Insert `(owner, key, request_hash)` into `idempotency_keys` first. The primary key makes a concurrent duplicate wait on the first transaction.
+2. On a conflict with a committed row: the same `request_hash` returns the stored response; a different one is `422` `IDEMPOTENCY_KEY_REUSED`.
+3. Otherwise perform the write, store the response in the row, and commit. Write and record commit together or not at all.
+
+A crash at any point leaves either nothing (a retry runs the write) or a complete record (a retry gets the stored response). Nothing durable depends on the gateway or Redis.
 
 ### 4.5 Failure modes
 
@@ -204,16 +226,30 @@ sequenceDiagram
 | Inventory slow or down | `GetStockLevels` misses its 150 ms deadline | Pages render with `stockStatus: UNKNOWN`; `sagamart_gateway_stock_unknown_total` counts it. Admin stock changes return `503`. | Automatic once Inventory answers |
 | Catalog down | Gateway's request fails or its circuit breaker is open | `503` Problem Details with `Retry-After` for browse, cart and admin | Breaker half-opens after 10 s |
 | DynamoDB down | Catalog's cart call fails | Cart endpoints `503`; browsing unaffected | Automatic |
-| Redis down | Rate-limit or idempotency call fails | Rate limiting **fails open** (allow and log). Admin `POST`s **fail closed** (`503`), because without the store a retry could create a duplicate. | Automatic |
+| Redis down | Rate-limit call fails or exceeds its 50 ms deadline | Rate limiting **fails open**: allow, log and count. Nothing else depends on Redis. | Automatic |
 | Invalid or expired JWT | Verification fails | `401`; admin route without the admin role is `403` | Get a new token |
 | Stale admin edit | Version mismatch | `412` (Catalog) or `409` (stock) with the current version in the body | Re-read and retry |
 | A cart above 50 lines | Conditional write fails | `422` `CART_LINE_LIMIT` | — |
+
+**Deadlines.** Every outbound call has one, so a hung dependency fails fast and the behaviour above applies:
+
+| Call | Deadline |
+|---|---|
+| Gateway → Inventory `GetStockLevels` | 150 ms (then `UNKNOWN`) |
+| Gateway → Inventory `SetStockLevel` | 2 s |
+| Gateway → Catalog reads | 1 s |
+| Gateway → Catalog writes | 3 s |
+| Gateway → Redis (rate limit) | 50 ms (then fail open) |
+| Catalog → Postgres | 2 s statement timeout |
+| Catalog → DynamoDB | 500 ms per call, two retries within 1 s |
+
+The gateway passes its remaining deadline on; a service never works longer than the caller is waiting.
 
 ### 4.6 Concurrency and consistency
 
 - **Product and SKU edits** use optimistic concurrency on `version` (`If-Match`). A lost update is impossible, and conflicts are rare enough that retrying is the client's job.
 - **`min_price`** is recomputed in the same transaction as any SKU price or status change, so listings never filter on a stale price.
-- **Two concurrent writes to one cart line:** last writer wins, which is fine for a cart. The line counter in `META` uses a conditional update, so concurrent adds can't exceed 50 lines.
+- **Concurrent cart writes** are conditional on the cart's `version` and retried on conflict, so two tabs adding different SKUs both land, and the 50-line limit is checked against the cart as it really is.
 - **Stock shown on product pages and in carts is a snapshot.** It can be stale by the time a buyer checks out; Inventory's reservation at checkout is the authority (RFC-0001).
 - **Idempotency records** are per user, so two users can't collide on a key.
 
@@ -226,14 +262,16 @@ sequenceDiagram
 | gRPC from gateway to Catalog | Typed and fast, but Catalog is CRUD and queries; REST keeps it cache-friendly and matches System Design §4's rule (gRPC for saga commands) |
 | HMAC (shared-secret) identity header | Simpler key handling, but any service holding the secret could mint an admin identity. Ed25519 limits minting to the gateway at little extra cost. |
 | Cart in Postgres or Redis | Decided in ADR-0007 |
+| Cart lines as separate DynamoDB items (ADR-0007's original layout) | Each line carries its own TTL, so an untouched line can expire while the cart is in use. Keeping them aligned means rewriting every line on every write. One item per cart gives one TTL and one version. See ADR-0009. |
+| Idempotency records in gateway Redis | Not durable: a gateway crash after Catalog commits but before Redis stores the response loses the outcome, and a retry repeats the write. The write owner must record it in the same transaction. |
 | Next.js API routes as the BFF | Couples the API to the web app; k6, admin tooling and later clients need the same API |
 
 ## 6. Observability
 
 - **Both services:** OpenTelemetry auto-instrumentation for HTTP, pg, the AWS SDK (DynamoDB), ioredis and gRPC. Logs with `pino` via `nestjs-pino` using the conventions §7 fields, plus `/healthz`, `/readyz` and `/metrics`.
 - **Tracing:** `traceparent` flows from browser to gateway to Catalog and Inventory, so a product page is one trace.
-- **Gateway metrics:** RED per route (`sagamart_gateway_http_requests_total`, `..._request_duration_seconds`), `stock_unknown_total`, `rate_limited_total`, `idempotency_replays_total`, and circuit-breaker state.
-- **Catalog metrics:** RED per internal route, cart writes by outcome, and DynamoDB latency.
+- **Gateway metrics:** RED per route (`sagamart_gateway_http_requests_total`, `..._request_duration_seconds`), `stock_unknown_total`, `rate_limited_total`, `rate_limit_fail_open_total`, and circuit-breaker state.
+- **Catalog metrics:** RED per internal route, cart writes by outcome, cart version conflicts, `idempotency_replays_total`, and DynamoDB latency.
 - **Dashboard:** "Browse and cart": request rate and p99 per route, the stock-unknown rate, and Catalog and DynamoDB latency.
 
 ## 7. Performance and capacity
@@ -255,7 +293,8 @@ PRD targets: product list and detail **p99 < 200 ms** at target load, and browsi
 - **Integration (Testcontainers):**
   - Catalog against Postgres: listing order and filters across page boundaries, `min_price` maintenance, optimistic concurrency.
   - Catalog against DynamoDB Local: cart TTL, the 50-line limit under concurrent adds.
-  - Gateway against Redis: idempotency replay and concurrent duplicates.
+  - Catalog idempotency against Postgres: replay, a reused key with a different body, concurrent duplicates, and a write that fails leaving no record.
+  - Gateway against Redis: rate limiting, and failing open when Redis is unreachable.
   - Inventory: Go tests for identity verification (#17).
 - **Contract:** gateway and Catalog responses validated against their OpenAPI specs in tests; the gateway's Catalog client is generated from `catalog-internal-v1.yaml`.
 - **End to end:** a flow test on the Compose stack: dev token → admin creates a product and sets stock → buyer lists, opens and adds to cart → the cart shows the price and availability. Then the same with Inventory stopped (`stockStatus: UNKNOWN`), which also covers chaos experiment C6's browsing half.
@@ -272,11 +311,11 @@ Each step is its own issue and PR, roughly in order:
 5. **Cart module:** the DynamoDB table and the cart API.
 6. **Gateway skeleton:** dev JWT, identity signing, rate limiting, Problem Details.
 7. **Gateway composition:** browse, product detail and cart with Inventory stock, including the 150 ms degradation.
-8. **Gateway admin:** product writes with idempotency, and stock via Inventory.
-9. **Inventory identity check (#17).**
+8. **Inventory identity check (#17).** Before step 9, so the gateway never offers a stock-write route that Inventory doesn't also authorise.
+9. **Gateway admin:** product writes (idempotency enforced by Catalog), and stock via Inventory.
 10. **End-to-end flow test and the `browse.js` benchmark.**
 
-Nothing outside these services changes. Each step merges independently.
+Nothing outside these services changes. Each step merges independently, in this order.
 
 ## 11. Open questions
 
@@ -295,3 +334,4 @@ Nothing outside these services changes. Each step merges independently.
 | 2026-10-22 | No catalog events in Stage 1 | Nothing consumes them until the search indexer (Stage 3). Event design belongs in RFC-0003, and adding them then is additive. |
 | 2026-10-22 | `LOW_STOCK` means 5 or fewer units available, fixed | Enough for the MVP; a per-product threshold can be added later without a contract change. |
 | 2026-10-22 | Accepted | Self-review plus automated PR review (CodeRabbit); no outside reviewer available. |
+| 2026-10-22 | Revised after automated review (13 findings) | Guest token issued before any cart write; dev tokens require `userId`; `SetStockLevel` errors mapped with current version; active products must have an active SKU; at most 100 SKUs per product; cursors carry a query fingerprint; one DynamoDB item per cart (ADR-0009); idempotency enforced by Catalog in the write's own transaction; product stock aggregation and per-batch `UNKNOWN` defined; deadlines for every dependency; Inventory authorization (#17) ordered before gateway stock writes; the event deferral's backfill consequence recorded. |

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted (item layout refined by [ADR-0009](0009-cart-as-single-item.md)) |
 | **Date** | 2026-10-21 |
 | **Deciders** | Rizky |
 
