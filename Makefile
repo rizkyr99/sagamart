@@ -42,10 +42,11 @@ logs: deploy/compose/.env ## Follow logs
 	$(COMPOSE) --profile services logs -f --tail=100
 
 .PHONY: demo
-demo: deploy/compose/.env ## Build and start the full system: infrastructure plus every service
+demo: deploy/compose/.env ## Build and start the full system: infrastructure plus every service (needs make identity-keys once)
 	$(COMPOSE) --profile services up -d --build --wait
 	@echo "Sagamart is up."
 	@echo "  Inventory         gRPC localhost:9110, probes and metrics http://localhost:8110"
+	@echo "  Catalog           internal API, probes and metrics http://localhost:8120"
 	@echo "  Redpanda console  http://localhost:8080"
 	@echo "  Grafana           http://localhost:3001  (admin / admin)"
 	@echo "  Jaeger            http://localhost:16686"
@@ -85,12 +86,12 @@ contracts-openapi: ## Lint the OpenAPI specs and validate every example against 
 	cd contracts && npx --yes @redocly/cli@2.67.1 lint --config redocly.yaml
 
 .PHONY: identity-keys
-identity-keys: deploy/compose/.env ## Generate a local Ed25519 key pair for x-sagamart-identity into deploy/compose/.env
+identity-keys: deploy/compose/.env ## Generate a local Ed25519 key pair for x-sagamart-identity into deploy/compose/.env (JSON single-quoted so both bash and Compose read it)
 	@kid="local-$$(date +%Y%m%d%H%M%S)"; \
 	priv=$$(openssl genpkey -algorithm ed25519 -outform DER | base64 -w0); \
 	pub=$$(printf '%s' "$$priv" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 -w0); \
 	sed -i '/^IDENTITY_\(KEY_ID\|PRIVATE_KEY\|PUBLIC_KEYS\)=/d' deploy/compose/.env; \
-	printf 'IDENTITY_KEY_ID=%s\nIDENTITY_PRIVATE_KEY=%s\nIDENTITY_PUBLIC_KEYS={"%s":"%s"}\n' "$$kid" "$$priv" "$$kid" "$$pub" >> deploy/compose/.env; \
+	printf 'IDENTITY_KEY_ID=%s\nIDENTITY_PRIVATE_KEY=%s\nIDENTITY_PUBLIC_KEYS='"'"'{"%s":"%s"}'"'"'\n' "$$kid" "$$priv" "$$kid" "$$pub" >> deploy/compose/.env; \
 	echo "wrote identity key $$kid to deploy/compose/.env"
 
 .PHONY: contracts-format
