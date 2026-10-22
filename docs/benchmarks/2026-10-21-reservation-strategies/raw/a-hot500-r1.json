@@ -1,0 +1,92 @@
+{
+    "root_group": {
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {},
+        "name": ""
+    },
+    "metrics": {
+        "iteration_duration": {
+            "avg": 263.1884826510005,
+            "min": 117.560548,
+            "med": 224.51913100000002,
+            "p(90)": 384.65033900000145,
+            "p(99)": 736.82246465,
+            "max": 776.923146
+        },
+        "vus_max": {
+            "value": 500,
+            "min": 500,
+            "max": 500
+        },
+        "reservations_sold_out": {
+            "count": 4900,
+            "rate": 1787.0636750919255
+        },
+        "grpc_req_duration{status:0}": {
+            "avg": 338.2311264313726,
+            "min": 1.36699,
+            "med": 346.718382,
+            "p(90)": 468.5467822,
+            "p(99)": 502.63917949999995,
+            "max": 510.705094,
+            "thresholds": {
+                "p(99)>=0": false
+            }
+        },
+        "grpc_req_duration{status:9}": {
+            "min": 117.211759,
+            "med": 222.66459049999997,
+            "p(90)": 296.8427801000002,
+            "p(99)": 642.3436788600001,
+            "max": 710.480343,
+            "avg": 250.9921319348987,
+            "thresholds": {
+                "p(99)>=0": false
+            }
+        },
+        "grpc_req_duration": {
+            "avg": 252.771095837066,
+            "min": 1.36699,
+            "med": 223.4777515,
+            "p(90)": 353.68921510000007,
+            "p(99)": 642.19535541,
+            "max": 710.480343
+        },
+        "reservations_reserved": {
+            "count": 100,
+            "rate": 36.47068724677399,
+            "thresholds": {
+                "count==100": false
+            }
+        },
+        "iterations": {
+            "count": 5000,
+            "rate": 1823.5343623386996
+        },
+        "vus": {
+            "min": 351,
+            "max": 500,
+            "value": 351
+        },
+        "reservations_failed": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "data_sent": {
+            "count": 663933,
+            "rate": 242140.92795812397
+        },
+        "data_received": {
+            "count": 429936,
+            "rate": 156800.61392129023
+        }
+    },
+    "setup_data": {
+        "sku": "HOT-1792575151226"
+    }
+}

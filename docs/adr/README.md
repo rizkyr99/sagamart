@@ -11,12 +11,12 @@ One file per decision, numbered in order. Accepted ADRs are never edited except 
 | [0005](0005-orchestrated-checkout-saga.md) | Coordinate checkout with an orchestrated saga | Accepted | 2026-10-21 |
 | [0006](0006-transactional-outbox.md) | Publish events through a transactional outbox | Accepted | 2026-10-21 |
 | [0007](0007-cart-in-dynamodb.md) | Store carts in DynamoDB | Accepted | 2026-10-21 |
+| [0008](0008-reservation-strategy.md) | Reserve stock with a single conditional UPDATE in Postgres | Accepted | 2026-10-21 |
 
 ## Planned ADRs
 
 | Topic | Expected before or during |
 |---|---|
-| Inventory reservation strategy (conditional UPDATE vs row lock vs Redis Lua), decided by benchmark | Stage 1, First slice |
 | gRPC for internal commands vs REST | Stage 2, Checkout saga |
 | Payment ledger design (double-entry, append-only) | Stage 2, Checkout saga |
 | SSE vs WebSocket for live order status | Stage 3, Events |

@@ -1,0 +1,92 @@
+{
+    "setup_data": {
+        "sku": "HOT-1792575262963"
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {}
+    },
+    "metrics": {
+        "reservations_failed": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "vus_max": {
+            "value": 5000,
+            "min": 2451,
+            "max": 5000
+        },
+        "iterations": {
+            "count": 5000,
+            "rate": 1026.149429323485
+        },
+        "reservations_sold_out": {
+            "count": 4900,
+            "rate": 1005.6264407370154
+        },
+        "grpc_req_duration": {
+            "avg": 3149.908824697726,
+            "min": 2.029301,
+            "med": 3208.5881575000003,
+            "p(90)": 3663.9241658,
+            "p(99)": 3989.45469594,
+            "max": 4290.599501
+        },
+        "grpc_req_duration{status:9}": {
+            "min": 2447.450597,
+            "med": 3218.3435895000002,
+            "p(90)": 3665.2119423,
+            "p(99)": 3989.46827264,
+            "max": 4290.599501,
+            "avg": 3195.4254600271474,
+            "thresholds": {
+                "p(99)>=0": false
+            }
+        },
+        "reservations_reserved": {
+            "count": 100,
+            "rate": 20.5229885864697,
+            "thresholds": {
+                "count==100": false
+            }
+        },
+        "data_received": {
+            "count": 2189906,
+            "rate": 449434.1584344152
+        },
+        "iteration_duration": {
+            "avg": 3611.4629432634033,
+            "min": 557.328946,
+            "med": 3769.952601,
+            "p(90)": 4411.3581204,
+            "p(99)": 4518.966104980001,
+            "max": 4732.570132
+        },
+        "data_sent": {
+            "count": 1343192,
+            "rate": 275663.1408543741
+        },
+        "grpc_req_duration{status:0}": {
+            "min": 2.029301,
+            "med": 958.533681,
+            "p(90)": 1433.6597639000001,
+            "p(99)": 1739.79706449,
+            "max": 1764.451928,
+            "avg": 963.3253627941175,
+            "thresholds": {
+                "p(99)>=0": false
+            }
+        },
+        "vus": {
+            "max": 5000,
+            "value": 4895,
+            "min": 0
+        }
+    }
+}
