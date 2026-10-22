@@ -213,6 +213,8 @@ jobs:
         run: pnpm audit --audit-level high
       - name: Catalog image builds
         run: docker build -f services/catalog/Dockerfile -t sagamart-catalog:ci .
+      - name: Gateway image builds
+        run: docker build -f services/gateway/Dockerfile -t sagamart-gateway:ci .
 
   # ---- Gate ----
 
