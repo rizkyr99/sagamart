@@ -1,0 +1,660 @@
+openapi: 3.1.0
+info:
+  title: Sagamart public API
+  version: 1.0.0
+  summary: The API the storefront, admin tools and load tests call, served by the gateway.
+  description: |
+    Defined in [RFC-0005](https://github.com/rizkyr99/sagamart/blob/main/docs/rfc/0005-catalog-cart-gateway.md).
+
+    - JSON fields are camelCase; money is whole rupiah with a currency (`IDR`).
+    - Errors are RFC 9457 Problem Details (`application/problem+json`) with a stable `code`.
+    - Stock shown on product and cart views is a snapshot. Inventory's reservation at checkout is the authority.
+      If Inventory doesn't answer within 150 ms, stock is `UNKNOWN` and the page still renders.
+    - Every request is traced; Problem Details carry the `traceId`.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:8100
+    description: Local gateway (`make demo`)
+
+tags:
+  - name: Catalog
+    description: Browse categories and products (FR-01, FR-03).
+  - name: Cart
+    description: Guest and signed-in carts (FR-04).
+  - name: Admin
+    description: Product, category and stock management (FR-11). Requires the `admin` role.
+  - name: Development
+    description: Only present when the gateway runs with `GATEWAY_DEV_AUTH=true`, never in `prod`.
+
+security: []
+
+paths:
+  /v1/categories:
+    get:
+      tags: [Catalog]
+      operationId: listCategories
+      summary: List all categories
+      responses:
+        "200":
+          description: Every category, flat; build the tree from `parentId`.
+          content:
+            application/json:
+              schema: { $ref: "components/common-v1.yaml#/components/schemas/CategoryList" }
+              example:
+                items:
+                  - { id: 0199f2d0-1a2b-7c3d-8e4f-5a6b7c8d9e01, slug: kaos, name: Kaos, parentId: null, position: 0 }
+        "429": { $ref: "components/common-v1.yaml#/components/responses/TooManyRequests" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/products:
+    get:
+      tags: [Catalog]
+      operationId: listProducts
+      summary: List active products
+      description: Keyset-paginated. Filters apply to each product's lowest active SKU price.
+      parameters:
+        - { $ref: "components/common-v1.yaml#/components/parameters/Category" }
+        - { $ref: "components/common-v1.yaml#/components/parameters/MinPrice" }
+        - { $ref: "components/common-v1.yaml#/components/parameters/MaxPrice" }
+        - { $ref: "components/common-v1.yaml#/components/parameters/Sort" }
+        - { $ref: "components/common-v1.yaml#/components/parameters/Limit" }
+        - { $ref: "components/common-v1.yaml#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of products.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductPage" }
+              example:
+                items:
+                  - id: 0199f2d1-2b3c-7d4e-9f50-6a7b8c9d0e12
+                    slug: kaos-polos-hitam
+                    name: Kaos Polos Hitam
+                    category: { id: 0199f2d0-1a2b-7c3d-8e4f-5a6b7c8d9e01, slug: kaos, name: Kaos }
+                    imageUrl: https://images.sagamart.dev/kaos-polos-hitam-1.jpg
+                    fromPrice: { amount: 79000, currency: IDR }
+                    stockStatus: LOW_STOCK
+                nextCursor: eyJxIjoiOWYxYyIsInQiOiIyMDI2LTEwLTIyVDAzOjAwOjAwLjAwMFoiLCJpZCI6IjAxOTlmMmQxIn0
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "429": { $ref: "components/common-v1.yaml#/components/responses/TooManyRequests" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/products/{slug}:
+    get:
+      tags: [Catalog]
+      operationId: getProduct
+      summary: Get an active product with its SKUs and live stock
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { $ref: "components/common-v1.yaml#/components/schemas/Slug" }
+      responses:
+        "200":
+          description: The product.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductDetail" }
+              example:
+                id: 0199f2d1-2b3c-7d4e-9f50-6a7b8c9d0e12
+                slug: kaos-polos-hitam
+                name: Kaos Polos Hitam
+                description: Kaos katun 100%, potongan reguler.
+                category: { id: 0199f2d0-1a2b-7c3d-8e4f-5a6b7c8d9e01, slug: kaos, name: Kaos }
+                imageUrls: ["https://images.sagamart.dev/kaos-polos-hitam-1.jpg"]
+                fromPrice: { amount: 79000, currency: IDR }
+                stockStatus: IN_STOCK
+                skus:
+                  - { sku: KAOS-001-M, name: M / Hitam, price: { amount: 79000, currency: IDR }, available: 12, stockStatus: IN_STOCK }
+                  - { sku: KAOS-001-L, name: L / Hitam, price: { amount: 79000, currency: IDR }, available: 0, stockStatus: OUT_OF_STOCK }
+        "404": { $ref: "components/common-v1.yaml#/components/responses/NotFound" }
+        "429": { $ref: "components/common-v1.yaml#/components/responses/TooManyRequests" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/cart/guest-token:
+    post:
+      tags: [Cart]
+      operationId: createGuestCartToken
+      summary: Get a token for a guest cart
+      description: |
+        Writes nothing. The cart is created by the first `PUT /v1/cart/lines/{sku}` carrying the token,
+        so a lost response is harmless: ask again. Signed-in buyers don't need a token.
+      responses:
+        "201":
+          description: A new token. Send it as `X-Cart-Token` on cart calls.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GuestCartToken" }
+              example: { token: "EXAMPLE_guest_token_00" }
+        "429": { $ref: "components/common-v1.yaml#/components/responses/TooManyRequests" }
+
+  /v1/cart:
+    get:
+      tags: [Cart]
+      operationId: getCart
+      summary: Get the current cart with current prices and availability
+      description: An unknown or expired guest token, or a buyer with no cart, gets an empty cart.
+      security:
+        - bearerAuth: []
+        - cartToken: []
+      responses:
+        "200":
+          description: The cart.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+              examples:
+                cart: { $ref: "#/components/examples/Cart" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "429": { $ref: "components/common-v1.yaml#/components/responses/TooManyRequests" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/cart/lines/{sku}:
+    parameters:
+      - name: sku
+        in: path
+        required: true
+        schema: { $ref: "components/common-v1.yaml#/components/schemas/Sku" }
+    put:
+      tags: [Cart]
+      operationId: setCartLine
+      summary: Set a line's quantity (0 removes it)
+      description: Idempotent. Creates the cart on the first write. The price snapshot is the SKU's current price.
+      security:
+        - bearerAuth: []
+        - cartToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CartLineQuantity" }
+            example: { quantity: 2 }
+      responses:
+        "200":
+          description: The updated cart.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+              examples:
+                cart: { $ref: "#/components/examples/Cart" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "404": { $ref: "components/common-v1.yaml#/components/responses/NotFound" }
+        "422": { $ref: "components/common-v1.yaml#/components/responses/Unprocessable" }
+        "429": { $ref: "components/common-v1.yaml#/components/responses/TooManyRequests" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+    delete:
+      tags: [Cart]
+      operationId: removeCartLine
+      summary: Remove a line
+      description: Idempotent; removing a line that isn't there returns the cart unchanged.
+      security:
+        - bearerAuth: []
+        - cartToken: []
+      responses:
+        "200":
+          description: The updated cart.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "429": { $ref: "components/common-v1.yaml#/components/responses/TooManyRequests" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/admin/categories:
+    post:
+      tags: [Admin]
+      operationId: createCategory
+      summary: Create a category
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: "components/common-v1.yaml#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "components/catalog-v1.yaml#/components/schemas/CategoryCreate" }
+            example: { slug: kaos, name: Kaos }
+      responses:
+        "201":
+          description: Created.
+          headers:
+            ETag: { $ref: "components/common-v1.yaml#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "components/common-v1.yaml#/components/schemas/Category" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "409": { $ref: "components/common-v1.yaml#/components/responses/Conflict" }
+        "422": { $ref: "components/common-v1.yaml#/components/responses/Unprocessable" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/admin/categories/{id}:
+    patch:
+      tags: [Admin]
+      operationId: updateCategory
+      summary: Edit a category
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "components/common-v1.yaml#/components/parameters/IfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "components/catalog-v1.yaml#/components/schemas/CategoryPatch" }
+            example: { name: Kaos Pria }
+      responses:
+        "200":
+          description: Updated.
+          headers:
+            ETag: { $ref: "components/common-v1.yaml#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "components/common-v1.yaml#/components/schemas/Category" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "404": { $ref: "components/common-v1.yaml#/components/responses/NotFound" }
+        "412": { $ref: "components/common-v1.yaml#/components/responses/PreconditionFailed" }
+        "428": { $ref: "components/common-v1.yaml#/components/responses/PreconditionRequired" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/admin/products:
+    get:
+      tags: [Admin]
+      operationId: listAdminProducts
+      summary: List products in any status
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: "components/common-v1.yaml#/components/schemas/ProductStatus" }
+        - { $ref: "components/common-v1.yaml#/components/parameters/Limit" }
+        - { $ref: "components/common-v1.yaml#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of products, newest first.
+          content:
+            application/json:
+              schema: { $ref: "components/catalog-v1.yaml#/components/schemas/AdminProductPage" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+    post:
+      tags: [Admin]
+      operationId: createProduct
+      summary: Create a product with its SKUs
+      description: Creating SKUs doesn't create stock; set it with `PUT /v1/admin/skus/{sku}/stock`.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: "components/common-v1.yaml#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "components/catalog-v1.yaml#/components/schemas/ProductCreate" }
+            examples:
+              tshirt: { $ref: "components/catalog-v1.yaml#/components/examples/ProductCreate" }
+      responses:
+        "201":
+          description: Created (or the original response, for a retry with the same key and body).
+          headers:
+            ETag: { $ref: "components/common-v1.yaml#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "components/catalog-v1.yaml#/components/schemas/AdminProduct" }
+              examples:
+                tshirt: { $ref: "components/catalog-v1.yaml#/components/examples/AdminProduct" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "409": { $ref: "components/common-v1.yaml#/components/responses/Conflict" }
+        "422": { $ref: "components/common-v1.yaml#/components/responses/Unprocessable" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/admin/products/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Admin]
+      operationId: getAdminProduct
+      summary: Get a product in any status, with its version
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The product.
+          headers:
+            ETag: { $ref: "components/common-v1.yaml#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "components/catalog-v1.yaml#/components/schemas/AdminProduct" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "404": { $ref: "components/common-v1.yaml#/components/responses/NotFound" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+    patch:
+      tags: [Admin]
+      operationId: updateProduct
+      summary: Edit a product
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: "components/common-v1.yaml#/components/parameters/IfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "components/catalog-v1.yaml#/components/schemas/ProductPatch" }
+            example: { status: ARCHIVED }
+      responses:
+        "200":
+          description: Updated.
+          headers:
+            ETag: { $ref: "components/common-v1.yaml#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "components/catalog-v1.yaml#/components/schemas/AdminProduct" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "404": { $ref: "components/common-v1.yaml#/components/responses/NotFound" }
+        "412": { $ref: "components/common-v1.yaml#/components/responses/PreconditionFailed" }
+        "422": { $ref: "components/common-v1.yaml#/components/responses/Unprocessable" }
+        "428": { $ref: "components/common-v1.yaml#/components/responses/PreconditionRequired" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/admin/products/{id}/skus:
+    post:
+      tags: [Admin]
+      operationId: addSku
+      summary: Add a variant to a product
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "components/common-v1.yaml#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "components/catalog-v1.yaml#/components/schemas/SkuCreate" }
+            example: { sku: KAOS-001-XL, name: XL / Hitam, price: { amount: 85000, currency: IDR } }
+      responses:
+        "201":
+          description: Created.
+          headers:
+            ETag: { $ref: "components/common-v1.yaml#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "components/catalog-v1.yaml#/components/schemas/AdminSku" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "404": { $ref: "components/common-v1.yaml#/components/responses/NotFound" }
+        "409": { $ref: "components/common-v1.yaml#/components/responses/Conflict" }
+        "422": { $ref: "components/common-v1.yaml#/components/responses/Unprocessable" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/admin/skus/{sku}:
+    patch:
+      tags: [Admin]
+      operationId: updateSku
+      summary: Edit a variant's name, price or status
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: sku, in: path, required: true, schema: { $ref: "components/common-v1.yaml#/components/schemas/Sku" } }
+        - { $ref: "components/common-v1.yaml#/components/parameters/IfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "components/catalog-v1.yaml#/components/schemas/SkuPatch" }
+            example: { price: { amount: 69000, currency: IDR } }
+      responses:
+        "200":
+          description: Updated.
+          headers:
+            ETag: { $ref: "components/common-v1.yaml#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "components/catalog-v1.yaml#/components/schemas/AdminSku" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "404": { $ref: "components/common-v1.yaml#/components/responses/NotFound" }
+        "412": { $ref: "components/common-v1.yaml#/components/responses/PreconditionFailed" }
+        "422": { $ref: "components/common-v1.yaml#/components/responses/Unprocessable" }
+        "428": { $ref: "components/common-v1.yaml#/components/responses/PreconditionRequired" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/admin/skus/{sku}/stock:
+    put:
+      tags: [Admin]
+      operationId: setStockLevel
+      summary: Set a SKU's on-hand stock
+      description: |
+        Calls Inventory's `SetStockLevel`. `expectedVersion` 0 creates the stock record.
+        Both precondition failures are `409` with `currentVersion`, `onHand` and `reserved`, so the admin can retry correctly.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: sku, in: path, required: true, schema: { $ref: "components/common-v1.yaml#/components/schemas/Sku" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetStock" }
+            example: { onHand: 100, expectedVersion: 0 }
+      responses:
+        "200":
+          description: The new stock level.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockLevel" }
+              example: { sku: KAOS-001-M, onHand: 100, reserved: 0, available: 100, version: 1 }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "409":
+          description: '`VERSION_CONFLICT` (another change came first) or `STOCK_BELOW_RESERVED` (`onHand` below what reservations hold).'
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/StockConflict" }
+              example:
+                type: https://sagamart.dev/errors/stock-below-reserved
+                title: Stock below reserved
+                status: 409
+                code: STOCK_BELOW_RESERVED
+                detail: KAOS-001-M has 4 units reserved.
+                currentVersion: 7
+                onHand: 10
+                reserved: 4
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/dev/token:
+    post:
+      tags: [Development]
+      operationId: issueDevToken
+      summary: Issue a development JWT (dev only)
+      description: Exists only with `GATEWAY_DEV_AUTH=true`; the gateway refuses to start with it in `prod`. Replaced by OIDC at Core complete.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DevTokenRequest" }
+            example: { role: admin, userId: 0199f2e0-0000-7000-8000-000000000001 }
+      responses:
+        "200":
+          description: A signed token, valid for one hour.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DevToken" }
+              example: { token: "<development JWT>", expiresAt: "2026-10-22T04:00:00.000Z" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A development JWT until Core complete (`POST /v1/dev/token`), then an OIDC access token.
+    cartToken:
+      type: apiKey
+      in: header
+      name: X-Cart-Token
+      description: A guest cart token from `POST /v1/cart/guest-token`.
+
+  schemas:
+    StockStatus:
+      description: '`LOW_STOCK` is 1–5 available; `UNKNOWN` means Inventory didn''t answer in time or doesn''t know the SKU.'
+      type: string
+      enum: [IN_STOCK, LOW_STOCK, OUT_OF_STOCK, UNKNOWN]
+
+    ProductSummary:
+      allOf:
+        - $ref: "components/catalog-v1.yaml#/components/schemas/ProductSummaryBase"
+        - type: object
+          required: [stockStatus]
+          properties:
+            stockStatus:
+              $ref: "#/components/schemas/StockStatus"
+              description: The best known status of the product's SKUs; `UNKNOWN` only if none is known to be available and one is unknown.
+
+    ProductPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ProductSummary" } }
+        nextCursor: { type: [string, "null"], description: "Pass as `cursor` for the next page; null on the last page." }
+
+    SkuView:
+      allOf:
+        - $ref: "components/catalog-v1.yaml#/components/schemas/SkuBase"
+        - type: object
+          required: [available, stockStatus]
+          properties:
+            available: { type: [integer, "null"], minimum: 0, description: "Null when `stockStatus` is `UNKNOWN`." }
+            stockStatus: { $ref: "#/components/schemas/StockStatus" }
+
+    ProductDetail:
+      allOf:
+        - $ref: "components/catalog-v1.yaml#/components/schemas/ProductDetailBase"
+        - type: object
+          required: [stockStatus, skus]
+          properties:
+            stockStatus: { $ref: "#/components/schemas/StockStatus" }
+            skus:
+              type: array
+              minItems: 1
+              maxItems: 100
+              items: { $ref: "#/components/schemas/SkuView" }
+
+    GuestCartToken:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, pattern: "^[A-Za-z0-9_-]{22}$", description: "128 random bits, base64url without padding." }
+
+    CartLineQuantity:
+      type: object
+      required: [quantity]
+      properties:
+        quantity: { type: integer, minimum: 0, maximum: 100, description: "0 removes the line." }
+      additionalProperties: false
+
+    CartLine:
+      type: object
+      required: [sku, productSlug, productName, skuName, quantity, priceSnapshot, price, priceChanged, available, exceedsAvailable, stockStatus]
+      properties:
+        sku: { $ref: "components/common-v1.yaml#/components/schemas/Sku" }
+        productSlug: { $ref: "components/common-v1.yaml#/components/schemas/Slug" }
+        productName: { type: string }
+        skuName: { type: string }
+        quantity: { type: integer, minimum: 1, maximum: 100 }
+        priceSnapshot: { $ref: "components/common-v1.yaml#/components/schemas/PositiveMoney", description: "The price when the line was last set." }
+        price:
+          description: The current price; null if the SKU is no longer sold.
+          oneOf:
+            - $ref: "components/common-v1.yaml#/components/schemas/PositiveMoney"
+            - type: "null"
+        priceChanged: { type: boolean }
+        available: { type: [integer, "null"], minimum: 0, description: "Null when stock is `UNKNOWN`." }
+        exceedsAvailable: { type: [boolean, "null"], description: "True when `quantity` > `available`; null when stock is `UNKNOWN`." }
+        stockStatus: { $ref: "#/components/schemas/StockStatus" }
+
+    Cart:
+      type: object
+      required: [lines, lineCount, total, expiresAt]
+      properties:
+        lines: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/CartLine" } }
+        lineCount: { type: integer, minimum: 0, maximum: 50 }
+        total: { $ref: "components/common-v1.yaml#/components/schemas/Money", description: "Sum of quantity × current price over lines still sold." }
+        expiresAt: { type: [string, "null"], format: date-time, description: "Seven days after the last change; null for an empty cart." }
+
+    SetStock:
+      type: object
+      required: [onHand, expectedVersion]
+      properties:
+        onHand: { type: integer, format: int64, minimum: 0 }
+        expectedVersion: { type: integer, format: int64, minimum: 0, description: "The current `version`, or 0 to create." }
+      additionalProperties: false
+
+    StockLevel:
+      type: object
+      required: [sku, onHand, reserved, available, version]
+      properties:
+        sku: { $ref: "components/common-v1.yaml#/components/schemas/Sku" }
+        onHand: { type: integer, format: int64, minimum: 0 }
+        reserved: { type: integer, format: int64, minimum: 0 }
+        available: { type: integer, format: int64, minimum: 0 }
+        version: { type: integer, format: int64, minimum: 1 }
+
+    StockConflict:
+      allOf:
+        - $ref: "components/common-v1.yaml#/components/schemas/Problem"
+        - type: object
+          required: [currentVersion, onHand, reserved]
+          properties:
+            code: { type: string, enum: [VERSION_CONFLICT, STOCK_BELOW_RESERVED] }
+            currentVersion: { type: integer, format: int64, minimum: 0, description: "0 if the SKU has no stock record yet." }
+            onHand: { type: integer, format: int64, minimum: 0 }
+            reserved: { type: integer, format: int64, minimum: 0 }
+
+    DevTokenRequest:
+      type: object
+      required: [role, userId]
+      properties:
+        role: { type: string, enum: [buyer, admin] }
+        userId: { type: string, format: uuid }
+      additionalProperties: false
+
+    DevToken:
+      type: object
+      required: [token, expiresAt]
+      properties:
+        token: { type: string }
+        expiresAt: { type: string, format: date-time }
+
+  examples:
+    Cart:
+      value:
+        lineCount: 1
+        total: { amount: 158000, currency: IDR }
+        expiresAt: "2026-10-29T03:15:00.000Z"
+        lines:
+          - sku: KAOS-001-M
+            productSlug: kaos-polos-hitam
+            productName: Kaos Polos Hitam
+            skuName: M / Hitam
+            quantity: 2
+            priceSnapshot: { amount: 79000, currency: IDR }
+            price: { amount: 79000, currency: IDR }
+            priceChanged: false
+            available: 12
+            exceedsAvailable: false
+            stockStatus: IN_STOCK

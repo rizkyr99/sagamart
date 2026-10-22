@@ -114,6 +114,15 @@ jobs:
           go build ./...
           go vet ./...
 
+  openapi:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint OpenAPI specs and validate every example
+        run: make contracts-openapi
+
   event-schemas:
     needs: changes
     if: needs.changes.outputs.contracts == 'true'
@@ -163,7 +172,7 @@ jobs:
 
   ci:
     if: always()
-    needs: [changes, markdown, links, proto, event-schemas, inventory]
+    needs: [changes, markdown, links, proto, openapi, event-schemas, inventory]
     runs-on: ubuntu-latest
     steps:
       - name: Every job that ran passed

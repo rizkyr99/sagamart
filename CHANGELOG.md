@@ -15,5 +15,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - CI gates for contracts, docs and secret scanning; issue and pull request templates.
 - Inventory contract accepted (RFC-0001): `SetStockLevel`, domain error reasons with `InsufficientStockDetail`, and the `inventory.reservation.expired/v1` and `inventory.stock.adjusted/v1` event schemas with examples.
 - Generated Go code for the contracts, committed under `contracts/gen/go` and checked for staleness in CI.
+- Contracts for the First slice (RFC-0005): the public API (`public-v1.yaml`), Catalog's internal API (`catalog-internal-v1.yaml`) and the internal identity token (`identity.md`), with OpenAPI linting and example validation in CI, and `make identity-keys` for local keys.
 - k6 load tests for Inventory (`deploy/k6`): flash-sale and steady-load scenarios, an invariant check, and a results summariser. First benchmark report and ADR-0008 (reservation strategy).
 - Inventory service (see `services/inventory/CHANGELOG.md`): domain rules, Postgres reservation store, gRPC API, reservation expiry worker and outbox relay to Redpanda; `make demo` runs it with the infrastructure.

@@ -80,6 +80,19 @@ contracts-events: ## Compile event schemas and validate every example against it
 		if [ ! -f $(EVENTS)/schemas/$$name.schema.json ]; then echo "example without a schema: $$example"; exit 1; fi; \
 	done
 
+.PHONY: contracts-openapi
+contracts-openapi: ## Lint the OpenAPI specs and validate every example against its schema
+	cd contracts && npx --yes @redocly/cli@2.67.1 lint --config redocly.yaml
+
+.PHONY: identity-keys
+identity-keys: deploy/compose/.env ## Generate a local Ed25519 key pair for x-sagamart-identity into deploy/compose/.env
+	@kid="local-$$(date +%Y%m%d%H%M%S)"; \
+	priv=$$(openssl genpkey -algorithm ed25519 -outform DER | base64 -w0); \
+	pub=$$(printf '%s' "$$priv" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 -w0); \
+	sed -i '/^IDENTITY_\(KEY_ID\|PRIVATE_KEY\|PUBLIC_KEYS\)=/d' deploy/compose/.env; \
+	printf 'IDENTITY_KEY_ID=%s\nIDENTITY_PRIVATE_KEY=%s\nIDENTITY_PUBLIC_KEYS={"%s":"%s"}\n' "$$kid" "$$priv" "$$kid" "$$pub" >> deploy/compose/.env; \
+	echo "wrote identity key $$kid to deploy/compose/.env"
+
 .PHONY: contracts-format
 contracts-format: ## Format protobuf contracts in place
 	$(BUF) format -w
@@ -93,7 +106,7 @@ test: ## Run unit tests for every service that has a Makefile
 	done
 
 .PHONY: lint
-lint: contracts-lint contracts-events ## Run all linters
+lint: contracts-lint contracts-events contracts-openapi ## Run all linters
 	@set -e; for s in $(SERVICES); do \
 		if [ -f services/$$s/Makefile ]; then echo "==> $$s"; $(MAKE) -C services/$$s lint; fi; \
 	done
