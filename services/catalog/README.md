@@ -2,7 +2,7 @@
 
 NestJS 12 service for what Sagamart sells (products, SKUs, categories, prices) and what buyers intend to buy (carts). Two bounded contexts in one deployable, with separate stores: Postgres for the catalog, DynamoDB for carts. Design: [RFC-0005](../../docs/rfc/0005-catalog-cart-gateway.md), [ADR-0007](../../docs/adr/0007-cart-in-dynamodb.md), [ADR-0009](../../docs/adr/0009-cart-as-single-item.md). Contract: [`catalog-internal-v1.yaml`](../../contracts/openapi/catalog-internal-v1.yaml).
 
-> **Status:** browsing and price lookups work. Admin writes (the rest of #28) and carts (#29) come next.
+> **Status:** the Catalog context is complete: browsing, price lookups and admin writes. Carts (#29) come next.
 
 ## Run it
 
@@ -27,6 +27,13 @@ Or with everything else: `make demo` from the repo root.
 | `GET /internal/v1/products` | Active products: `sort` (`newest`, `price_asc`, `price_desc`), `category` (includes subcategories), `minPrice`, `maxPrice`, `limit`, `cursor` |
 | `GET /internal/v1/products/{slug}` | An active product with its active SKUs and prices; `404` otherwise |
 | `POST /internal/v1/skus:lookup` | Names, prices and status of up to 100 SKUs, in the order asked; unknown SKUs are left out |
+| `/internal/v1/admin/*` | `admin` role. Create and edit categories, products and SKUs; list and read products in any status |
+
+**Admin writes** follow three rules:
+
+- **Edits need `If-Match`** with the version from the resource's `ETag`. Missing is `428`, stale is `412 VERSION_CONFLICT` with `currentVersion`, so a lost update can't happen.
+- **Creates need `Idempotency-Key`**, enforced here in the same transaction as the write (RFC-0005 §4.4). The key row is claimed first. A concurrent duplicate waits on it and then gets the stored status, body and `ETag`. The same key with a different body is `422 IDEMPOTENCY_KEY_REUSED`, and a duplicate still waiting after the 2 s statement timeout gets `409 REQUEST_IN_PROGRESS`. A failed write leaves no record. Keys are per user and kept 24 hours; a sweep deletes older ones hourly.
+- **`min_price` follows every SKU write** in the same transaction. Every SKU write locks its product row first, which serialises the 100-SKU limit and the price recompute and keeps one lock order. An active product always keeps an active SKU (`422 PRODUCT_NEEDS_ACTIVE_SKU`, backed by the `active_has_price` constraint). Category moves are serialised by an advisory lock so they can't form a cycle (`422 CATEGORY_CYCLE`).
 
 **Listing cursors** use keyset pagination on (`created_at`, `id`) or (`min_price`, `id`), so a page boundary never skips or repeats a product while others are added. The cursor carries `created_at` as text with Postgres's microseconds: a JavaScript `Date` would round to milliseconds and lose rows created in the same millisecond. It also carries a fingerprint of the sort and filters (not `limit`), so reusing it with another query is `400 CURSOR_MISMATCH`; a cursor that isn't ours is `400 VALIDATION_FAILED`.
 
@@ -66,7 +73,8 @@ Validated at startup with zod; every problem is reported in one JSON log line, t
 | `src/problem.filter.ts` | Every error as Problem Details |
 | `src/health.controller.ts` | Probes and metrics |
 | `src/dynamo.ts` | DynamoDB client and carts-table setup |
-| `src/catalog/` | The Catalog context: `cursor.ts` and `listing-query.ts` (pure, unit-tested), `catalog.queries.ts` (SQL), `catalog.controller.ts` |
+| `src/catalog/` | The Catalog context: `cursor.ts` and `listing-query.ts` (pure, unit-tested); reads in `catalog.queries.ts` and `catalog.controller.ts`; writes in `catalog.admin.ts`, `admin.controller.ts` and `admin.schemas.ts` |
+| `src/idempotency.ts`, `src/preconditions.ts` | Idempotency-Key enforcement and sweep; `If-Match`, `Idempotency-Key` and request-hash rules (pure, unit-tested) |
 | `src/validation.ts` | zod parsing that fails as `400 VALIDATION_FAILED` with one `errors[]` entry per field |
 | `src/testing/` | Test support, not built: the Testcontainers harness and the contract checker |
 | `src/migrations/` | Forward-only TypeORM migrations |
@@ -80,3 +88,5 @@ pnpm --filter @sagamart/catalog test   # needs Docker: Testcontainers Postgres a
 The integration suite boots the real module against real containers and checks the migrations (including the `active_has_price` constraint), the carts table and its TTL, probes, metrics, the identity rules (missing, garbage, wrong audience, expired, unknown internal path, roles), and that errors are Problem Details without leaking internals.
 
 The Catalog suite seeds Postgres directly and checks every response body against `catalog-internal-v1.yaml` (`src/testing/contract.ts` bundles the spec with Redocly and validates with Ajv): sort orders and filters across page boundaries, ties and same-millisecond timestamps, cursors staying stable while products are added, cursor mismatch, subcategories, hidden drafts and archived SKUs, and `skus:lookup` limits.
+
+The admin suite covers roles, `If-Match` (missing, stale, two edits racing on one version), `min_price` through adds, price changes and archiving, the 100-SKU limit with five adds racing at 98, category cycles, and idempotency: replay, a reused key, five concurrent duplicates, a failed write leaving no record, a request still in progress, and 24-hour expiry.

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parse } from '../validation.js';
+import { slug } from './fields.js';
 
 export const SORTS = ['newest', 'price_asc', 'price_desc'] as const;
 export type Sort = (typeof SORTS)[number];
@@ -12,9 +13,6 @@ export interface ListingQuery {
   maxPrice: number | null;
   cursor: string | null;
 }
-
-export const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-export const slug = z.string().max(120).regex(SLUG, 'must be a lowercase slug');
 
 /** A query-string integer: digits only, so '', '1e5' and '-1' are refused rather than coerced. */
 const digits = (min: number, max: number) =>

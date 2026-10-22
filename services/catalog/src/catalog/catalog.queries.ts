@@ -71,7 +71,7 @@ const money = (amount: string | number): Money => ({ amount: Number(amount), cur
 
 // Created-at as text with Postgres's full microseconds: a JavaScript Date would round to milliseconds and
 // skip or repeat rows created in the same millisecond at a page boundary.
-const CREATED_KEY = `to_char(p.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+export const CREATED_KEY = `to_char(p.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
 /** ORDER BY and the keyset predicate for each sort; `$a` and `$b` are the cursor's value and id. */
 const ORDERS: Record<Sort, { orderBy: string; after: string }> = {

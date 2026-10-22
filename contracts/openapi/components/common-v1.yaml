@@ -169,7 +169,7 @@ components:
           schema: { $ref: "#/components/schemas/Problem" }
           example: { type: "https://sagamart.dev/errors/not-found", title: Not found, status: 404, code: NOT_FOUND }
     Conflict:
-      description: Conflicts with current state (`SLUG_TAKEN`, `SKU_TAKEN`, idempotent request still in progress).
+      description: Conflicts with current state (`SLUG_TAKEN`, `SKU_TAKEN`, or `REQUEST_IN_PROGRESS` while an earlier request with the same `Idempotency-Key` is still running).
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -187,7 +187,7 @@ components:
           schema: { $ref: "#/components/schemas/Problem" }
           example: { type: "https://sagamart.dev/errors/if-match-required", title: If-Match required, status: 428, code: IF_MATCH_REQUIRED }
     Unprocessable:
-      description: Valid request that business rules reject (`CART_LINE_LIMIT`, `IDEMPOTENCY_KEY_REUSED`, `PRODUCT_NEEDS_ACTIVE_SKU`, `SKU_LIMIT`).
+      description: Valid request that business rules reject (`CART_LINE_LIMIT`, `IDEMPOTENCY_KEY_REUSED`, `PRODUCT_NEEDS_ACTIVE_SKU`, `SKU_LIMIT`, `CATEGORY_NOT_FOUND`, `CATEGORY_CYCLE`).
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
