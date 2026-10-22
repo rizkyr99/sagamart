@@ -157,6 +157,35 @@ describe('probes and metrics', () => {
     await request(http()).get('/readyz').expect(200, { status: 'ok' });
   });
 
+  it('reports an unready dependency without revealing hosts, ports or table names', async () => {
+    // Nothing listens on this port: DynamoDB is unreachable, so the service is not ready.
+    const config = loadCatalogConfig({
+      CATALOG_ENV: 'test',
+      CATALOG_DB_URL: dbUrl,
+      CATALOG_DYNAMODB_ENDPOINT: 'http://127.0.0.1:1',
+      CATALOG_DYNAMODB_CREATE_TABLE: 'false',
+      CATALOG_CARTS_TABLE: 'secret-table-name',
+      CATALOG_IDENTITY_PUBLIC_KEYS: JSON.stringify({ [kid]: publicKey }),
+    });
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule.forRoot({ config, logDestination: new PassThrough() })],
+    }).compile();
+    const unready = moduleRef.createNestApplication();
+    configureApp(unready);
+    await unready.init();
+    try {
+      const res = await request(unready.getHttpServer() as Server)
+        .get('/readyz')
+        .expect(503);
+      expect(res.body).toMatchObject({ status: 503, code: 'DEPENDENCY_UNAVAILABLE' });
+      const body = JSON.stringify(res.body);
+      for (const secret of ['127.0.0.1', ':1', 'secret-table-name', 'ECONNREFUSED'])
+        expect(body).not.toContain(secret);
+    } finally {
+      await unready.close();
+    }
+  });
+
   it('serves /metrics from the telemetry handler', async () => {
     const res = await request(http()).get('/metrics').expect(200);
     expect(res.text).toContain('sagamart_catalog_test_total 1');

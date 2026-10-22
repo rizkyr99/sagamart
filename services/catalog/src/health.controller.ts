@@ -1,6 +1,6 @@
 import { DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import type { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { Controller, Get, Inject, Req, Res } from '@nestjs/common';
+import { Controller, Get, Inject, Logger, Req, Res } from '@nestjs/common';
 import { ProblemError, problem } from '@sagamart/node-common';
 import type { Request, Response } from 'express';
 import { DataSource } from 'typeorm';
@@ -21,6 +21,8 @@ const withTimeout = <T>(work: Promise<T>, ms: number): Promise<T> =>
 /** Liveness, readiness and metrics (conventions §8). Not under /internal, so no identity is needed. */
 @Controller()
 export class HealthController {
+  private readonly log = new Logger('HealthController');
+
   constructor(
     private readonly db: DataSource,
     @Inject(DYNAMODB) private readonly dynamo: DynamoDBClient,
@@ -35,20 +37,27 @@ export class HealthController {
 
   @Get('readyz')
   async readyz(): Promise<{ status: string }> {
-    try {
-      await withTimeout(this.db.query('SELECT 1'), 1000);
-      await withTimeout(
-        this.dynamo.send(new DescribeTableCommand({ TableName: this.config.dynamo.cartsTable })),
-        1000,
-      );
-    } catch (err) {
-      throw new ProblemError(
-        problem({
-          status: 503,
-          code: 'DEPENDENCY_UNAVAILABLE',
-          detail: `Not ready: ${(err as Error).message}`,
-        }),
-      );
+    const checks: [name: string, check: () => Promise<unknown>][] = [
+      ['postgres', () => this.db.query('SELECT 1')],
+      [
+        'dynamodb',
+        () => this.dynamo.send(new DescribeTableCommand({ TableName: this.config.dynamo.cartsTable })),
+      ],
+    ];
+    for (const [name, check] of checks) {
+      try {
+        await withTimeout(check(), 1000);
+      } catch (err) {
+        // /readyz needs no identity, so the cause (hosts, ports, table names) stays in the log.
+        this.log.warn({ dependency: name, err }, 'not ready');
+        throw new ProblemError(
+          problem({
+            status: 503,
+            code: 'DEPENDENCY_UNAVAILABLE',
+            detail: `Not ready: ${name} is unavailable.`,
+          }),
+        );
+      }
     }
     return { status: 'ok' };
   }

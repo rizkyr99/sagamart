@@ -19,8 +19,9 @@ Protobuf tooling (`buf`) runs in Docker through `make contracts-lint`, so it doe
 
 ```bash
 pnpm install          # every Node package and service
+pnpm build            # first: services read workspace packages' compiled type declarations
 pnpm lint             # ESLint (strict type-checked) and Prettier
-pnpm typecheck && pnpm build && pnpm test
+pnpm typecheck && pnpm test
 ```
 
 Shared code lives in `packages/node-common` (logger, telemetry, config validation, Problem Details, the internal identity). Services depend on it as `"@sagamart/node-common": "workspace:*"`.

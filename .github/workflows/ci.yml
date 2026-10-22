@@ -200,12 +200,13 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      # Build first: services resolve workspace packages through their compiled type declarations.
+      - name: Build
+        run: pnpm build
       - name: Lint (ESLint, Prettier)
         run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck
-      - name: Build
-        run: pnpm build
       - name: Unit tests with coverage
         run: pnpm test
       - name: Dependency audit (high and critical)
