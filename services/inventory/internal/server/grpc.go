@@ -8,10 +8,11 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
-// NewGRPCServer returns a gRPC server with tracing and RED metrics on every call, and the standard health service.
-// Reflection is enabled outside prod so grpcurl works locally. Callers register InventoryService on the server.
-func NewGRPCServer(env string) (*grpc.Server, *health.Server) {
-	srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))
+// NewGRPCServer returns a gRPC server with tracing and RED metrics on every call, the given interceptors (identity
+// checks), and the standard health service. Reflection is enabled outside prod so grpcurl works locally. Callers
+// register InventoryService on the server.
+func NewGRPCServer(env string, interceptors ...grpc.UnaryServerInterceptor) (*grpc.Server, *health.Server) {
+	srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()), grpc.ChainUnaryInterceptor(interceptors...))
 	hs := health.NewServer()
 	healthpb.RegisterHealthServer(srv, hs)
 	if env != "prod" {

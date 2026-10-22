@@ -71,7 +71,7 @@ Then authorize:
 | Any call | A valid token | HTTP `401` `UNAUTHENTICATED` / gRPC `UNAUTHENTICATED` |
 | Admin operations (Catalog `/internal/v1/admin/*`, Inventory `SetStockLevel`) | `admin` in `roles` | HTTP `403` `FORBIDDEN` / gRPC `PERMISSION_DENIED` |
 | A user's cart (`user:<id>` cart key) | `sub` equals `<id>` | HTTP `403` `FORBIDDEN` |
-| Saga commands (Inventory `ReserveStock`, `CommitReservation`, `ReleaseReservation`) | Defined in RFC-0002: a service identity issued to Order | — |
+| Saga commands (Inventory `ReserveStock`, `CommitReservation`, `ReleaseReservation`) | Defined in RFC-0002: a service identity issued to Order. Until then Inventory doesn't check these, and its gRPC port stays on the internal network. | — |
 
 Failures are logged with the reason (never the token) and counted in `sagamart_<service>_identity_rejections_total{reason}`.
 

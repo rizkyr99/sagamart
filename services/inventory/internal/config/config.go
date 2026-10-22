@@ -3,6 +3,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -27,6 +28,9 @@ type Config struct {
 	KafkaBrokers    []string      // Redpanda / Kafka seed brokers for the outbox relay
 	EventsTopic     string
 	OutboxInterval  time.Duration // how often the relay looks for unpublished events
+	// IdentityPublicKeys are the gateway keys trusted for x-sagamart-identity: kid → SPKI DER, base64
+	// (contracts/identity.md). The keys themselves are parsed, and checked, by identity.NewVerifier.
+	IdentityPublicKeys map[string]string
 }
 
 // Load reads the configuration through getenv. version is the build version, used unless INVENTORY_VERSION is set.
@@ -107,6 +111,13 @@ func Load(getenv func(string) string, version string) (Config, error) {
 	cfg.OutboxInterval, err = time.ParseDuration(get("INVENTORY_OUTBOX_INTERVAL", "200ms"))
 	if err != nil || cfg.OutboxInterval <= 0 {
 		errs = append(errs, fmt.Errorf("INVENTORY_OUTBOX_INTERVAL must be a positive duration such as 200ms, got %q", getenv("INVENTORY_OUTBOX_INTERVAL")))
+	}
+
+	switch raw := getenv("INVENTORY_IDENTITY_PUBLIC_KEYS"); {
+	case raw == "":
+		errs = append(errs, errors.New(`INVENTORY_IDENTITY_PUBLIC_KEYS is required: {"<kid>": "<SPKI DER, base64>"} (make identity-keys)`))
+	case json.Unmarshal([]byte(raw), &cfg.IdentityPublicKeys) != nil || len(cfg.IdentityPublicKeys) == 0:
+		errs = append(errs, errors.New(`INVENTORY_IDENTITY_PUBLIC_KEYS must be a JSON object of at least one {"<kid>": "<SPKI DER, base64>"}`))
 	}
 
 	if len(errs) > 0 {

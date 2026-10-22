@@ -15,9 +15,11 @@ The scripts call the Inventory gRPC API directly (`INVENTORY_ADDR`, default `loc
 make demo                                   # the stack, with Inventory built from source
 deploy/k6/reset-inventory.sh                # empty Inventory's tables (local stack only)
 docker run --rm --network host -v "$PWD:/work" -w /work/deploy/k6 grafana/k6:1.8.2 \
-  run -e ATTEMPTS=5000 -e VUS=5000 reserve-hot-sku.js
+  run -e INVENTORY_ADMIN_IDENTITY="$(deploy/k6/admin-identity.sh)" -e ATTEMPTS=5000 -e VUS=5000 reserve-hot-sku.js
 docker exec -i sagamart-inventory-db-1 psql -U inventory -d inventory < deploy/k6/check-inventory.sql
 ```
+
+Seeding (`SetStockLevel`) and stock reads (`GetStockLevels`) need the gateway's signed identity (#17). `admin-identity.sh` signs an admin one with the local key from `deploy/compose/.env`. It lasts 60 seconds, enough for `setup()` and a short run's `teardown()`, so generate it in the same command.
 
 `check-inventory.sql` asserts the invariants after a run: nothing oversold, `reserved` equal to what active reservations hold, and one reservation per order.
 
