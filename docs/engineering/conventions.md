@@ -18,6 +18,8 @@ sagamart/
 │   └── workflows/            # ci.yml (jobs per service, docs, contracts; one `ci` gate) + security.yml
 ├── apps/
 │   └── web/                  # Next.js storefront + admin
+├── packages/
+│   └── node-common/          # shared TypeScript: logging, telemetry, config, Problem Details, identity
 ├── services/
 │   ├── gateway/              # NestJS
 │   ├── catalog/              # NestJS (catalog + cart)
@@ -43,6 +45,7 @@ sagamart/
 ├── docs/
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md           # local setup and workflow
+├── package.json              # pnpm workspace root (packages/*, services/*, apps/*)
 └── Makefile                  # single entry point: make up, make test, make demo
 ```
 

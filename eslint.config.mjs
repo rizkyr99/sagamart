@@ -3,7 +3,16 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', 'contracts/gen/**', 'deploy/**', 'docs/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/coverage/**',
+      '**/node_modules/**',
+      'contracts/gen/**',
+      'deploy/**',
+      'docs/**',
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
@@ -21,5 +30,6 @@ export default tseslint.config(
     files: ['**/*.test.ts'],
     rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
   },
-  { files: ['**/*.mjs'], ...tseslint.configs.disableTypeChecked },
+  // Tool config files aren't part of any tsconfig; lint them without type information.
+  { files: ['**/*.mjs', '**/*.mts'], ...tseslint.configs.disableTypeChecked },
 );

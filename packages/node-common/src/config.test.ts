@@ -4,14 +4,18 @@ import { ConfigError, loadConfig } from './config';
 
 const schema = z.object({
   CATALOG_ENV: z.enum(['local', 'test', 'prod']).default('local'),
-  CATALOG_DB_URL: z.string().url(),
+  CATALOG_DB_URL: z.url(),
   CATALOG_HTTP_PORT: z.coerce.number().int().min(1).max(65535).default(8120),
 });
 
 describe('loadConfig', () => {
   it('parses, coerces and applies defaults', () => {
-    expect(loadConfig(schema, { CATALOG_DB_URL: 'postgres://db/catalog', CATALOG_HTTP_PORT: '9000' })).toEqual({
-      CATALOG_ENV: 'local', CATALOG_DB_URL: 'postgres://db/catalog', CATALOG_HTTP_PORT: 9000,
+    expect(
+      loadConfig(schema, { CATALOG_DB_URL: 'postgres://db/catalog', CATALOG_HTTP_PORT: '9000' }),
+    ).toEqual({
+      CATALOG_ENV: 'local',
+      CATALOG_DB_URL: 'postgres://db/catalog',
+      CATALOG_HTTP_PORT: 9000,
     });
   });
 
@@ -32,6 +36,8 @@ describe('loadConfig', () => {
   });
 
   it('treats empty strings as unset, so defaults apply', () => {
-    expect(loadConfig(schema, { CATALOG_DB_URL: 'postgres://db/catalog', CATALOG_ENV: '' }).CATALOG_ENV).toBe('local');
+    expect(loadConfig(schema, { CATALOG_DB_URL: 'postgres://db/catalog', CATALOG_ENV: '' }).CATALOG_ENV).toBe(
+      'local',
+    );
   });
 });

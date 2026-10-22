@@ -9,6 +9,17 @@ export class ConfigError extends Error {
 }
 
 /** Parses `env` with `schema` and fails fast with every problem at once (conventions §10). */
-export function loadConfig<S extends z.ZodType>(_schema: S, _env: NodeJS.ProcessEnv = process.env): z.output<S> {
-  throw new Error('not implemented');
+export function loadConfig<S extends z.ZodType>(
+  schema: S,
+  env: NodeJS.ProcessEnv = process.env,
+): z.output<S> {
+  // An empty variable means "not set", so defaults apply (as Compose often passes empty values).
+  const set = Object.fromEntries(
+    Object.entries(env).filter(([, value]) => value !== undefined && value !== ''),
+  );
+  const result = schema.safeParse(set);
+  if (!result.success) {
+    throw new ConfigError(result.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`));
+  }
+  return result.data;
 }

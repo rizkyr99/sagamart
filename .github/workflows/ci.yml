@@ -21,6 +21,7 @@ jobs:
       docs: ${{ steps.filter.outputs.docs }}
       contracts: ${{ steps.filter.outputs.contracts }}
       inventory: ${{ steps.filter.outputs.inventory }}
+      node: ${{ steps.filter.outputs.node }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -37,6 +38,20 @@ jobs:
             contracts:
               - *workflow
               - "contracts/**"
+            node:
+              - *workflow
+              - "packages/**"
+              - "services/catalog/**"
+              - "services/gateway/**"
+              - "apps/**"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
+              - "tsconfig.base.json"
+              - "eslint.config.mjs"
+              - ".prettierrc.json"
+              - ".prettierignore"
+              - ".node-version"
             inventory:
               - *workflow
               - "services/inventory/**"
@@ -168,11 +183,35 @@ jobs:
         working-directory: .
         run: docker build -f services/inventory/Dockerfile -t sagamart-inventory:ci .
 
+  node:
+    needs: changes
+    if: needs.changes.outputs.node == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Lint (ESLint, Prettier)
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Build
+        run: pnpm build
+      - name: Unit tests with coverage
+        run: pnpm test
+      - name: Dependency audit (high and critical)
+        run: pnpm audit --audit-level high
+
   # ---- Gate ----
 
   ci:
     if: always()
-    needs: [changes, markdown, links, proto, openapi, event-schemas, inventory]
+    needs: [changes, markdown, links, proto, openapi, event-schemas, node, inventory]
     runs-on: ubuntu-latest
     steps:
       - name: Every job that ran passed
