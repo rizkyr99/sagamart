@@ -1,0 +1,13 @@
+# Prettier formats the Node workspace only; docs, contracts and other languages have their own tools.
+*
+!*/
+!packages/**
+!services/catalog/**
+!services/gateway/**
+!apps/**
+!eslint.config.mjs
+!.prettierrc.json
+**/dist/**
+**/coverage/**
+**/node_modules/**
+pnpm-lock.yaml
