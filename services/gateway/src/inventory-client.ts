@@ -2,6 +2,7 @@ import { createClient } from '@connectrpc/connect';
 import type { Client } from '@connectrpc/connect';
 import { createGrpcTransport } from '@connectrpc/connect-node';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { OnApplicationBootstrap } from '@nestjs/common';
 import { metrics } from '@opentelemetry/api';
 import { IDENTITY_HEADER } from '@sagamart/node-common';
 import { InventoryService } from '@sagamart/contracts/inventory/v1';
@@ -21,7 +22,7 @@ const unknownStock = metrics.getMeter('@sagamart/gateway').createCounter('sagama
  * deadline as the gRPC deadline, which Inventory's Go handlers see on their context.
  */
 @Injectable()
-export class InventoryClient {
+export class InventoryClient implements OnApplicationBootstrap {
   private readonly log = new Logger('InventoryClient');
   private readonly client: Client<typeof InventoryService>;
 
@@ -29,7 +30,33 @@ export class InventoryClient {
     @Inject(GATEWAY_CONFIG) config: GatewayConfig,
     private readonly internal: InternalClient,
   ) {
-    this.client = createClient(InventoryService, createGrpcTransport({ baseUrl: config.inventoryUrl }));
+    this.client = createClient(
+      InventoryService,
+      createGrpcTransport({
+        baseUrl: config.inventoryUrl,
+        // Keep the HTTP/2 connection open between requests: setting one up can take most of the 150 ms budget.
+        pingIntervalMs: 30_000,
+        pingIdleConnection: true,
+      }),
+    );
+  }
+
+  /** Opens the connection before the first page needs it. Best effort: never delays startup past 1 s or fails it. */
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      await this.client.getStockLevels(
+        { skus: [] },
+        {
+          headers: { [IDENTITY_HEADER]: this.internal.identityFor({ roles: [] }, 'inventory') },
+          timeoutMs: 1000,
+        },
+      );
+    } catch (err) {
+      this.log.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'inventory not reachable at startup',
+      );
+    }
   }
 
   /**
