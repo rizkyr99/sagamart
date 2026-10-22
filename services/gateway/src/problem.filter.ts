@@ -45,7 +45,10 @@ export class ProblemFilter implements ExceptionFilter {
       ...(span && isSpanContextValid(span) ? { traceId: span.traceId } : {}),
     };
     // Unavailable means "retry": say when (contracts: Unavailable carries Retry-After). A 429 sets its own.
-    if (rendered.status === 503 && !response.hasHeader('Retry-After')) response.setHeader('Retry-After', '1');
+    if (rendered.status === 503 && !response.hasHeader('Retry-After')) {
+      const after = typeof rendered.retryAfter === 'number' ? rendered.retryAfter : 1;
+      response.setHeader('Retry-After', String(after));
+    }
     response
       .status(rendered.status)
       .setHeader('content-type', 'application/problem+json; charset=utf-8')

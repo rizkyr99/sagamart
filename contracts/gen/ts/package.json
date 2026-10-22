@@ -1,0 +1,24 @@
+{
+  "name": "@sagamart/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript generated from contracts/proto by buf (protobuf-es). Do not edit: run make contracts-generate.",
+  "type": "module",
+  "exports": {
+    "./inventory/v1": {
+      "types": "./dist/sagamart/inventory/v1/inventory_pb.d.ts",
+      "default": "./dist/sagamart/inventory/v1/inventory_pb.js"
+    },
+    "./payment/v1": {
+      "types": "./dist/sagamart/payment/v1/payment_pb.d.ts",
+      "default": "./dist/sagamart/payment/v1/payment_pb.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.16.0"
+  }
+}

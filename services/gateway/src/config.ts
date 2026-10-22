@@ -27,6 +27,7 @@ const envSchema = z
     GATEWAY_IDENTITY_KEY_ID: z.string().min(1),
     GATEWAY_IDENTITY_PRIVATE_KEY: ed25519PrivateKey,
     GATEWAY_CATALOG_URL: z.url({ protocol: /^https?$/ }).default('http://localhost:8120'),
+    GATEWAY_INVENTORY_URL: z.url({ protocol: /^https?$/ }).default('http://localhost:9110'),
     GATEWAY_REDIS_URL: z.url({ protocol: /^rediss?$/ }).default('redis://localhost:6380'),
     GATEWAY_RATE_LIMIT_PER_SECOND: int(1, 100_000).default(20),
     GATEWAY_RATE_LIMIT_BURST: int(1, 100_000).default(40),
@@ -60,6 +61,8 @@ export interface GatewayConfig {
   /** The key that signs x-sagamart-identity (contracts/identity.md); services hold the public half. */
   identity: { keyId: string; privateKey: string };
   catalogUrl: string;
+  /** Inventory's gRPC endpoint (h2c in Compose). */
+  inventoryUrl: string;
   redisUrl: string;
   /** Token bucket per IP (anonymous) or per user: `perSecond` refill, `burst` capacity (RFC-0005 §8). */
   rateLimit: { perSecond: number; burst: number };
@@ -82,6 +85,7 @@ export function loadGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
     },
     identity: { keyId: e.GATEWAY_IDENTITY_KEY_ID, privateKey: e.GATEWAY_IDENTITY_PRIVATE_KEY },
     catalogUrl: e.GATEWAY_CATALOG_URL,
+    inventoryUrl: e.GATEWAY_INVENTORY_URL,
     redisUrl: e.GATEWAY_REDIS_URL,
     rateLimit: { perSecond: e.GATEWAY_RATE_LIMIT_PER_SECOND, burst: e.GATEWAY_RATE_LIMIT_BURST },
     otlpEndpoint: e.OTEL_EXPORTER_OTLP_ENDPOINT,

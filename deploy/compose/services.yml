@@ -59,6 +59,7 @@ services:
       GATEWAY_IDENTITY_KEY_ID: ${IDENTITY_KEY_ID:?run make identity-keys}
       GATEWAY_IDENTITY_PRIVATE_KEY: ${IDENTITY_PRIVATE_KEY:?run make identity-keys}
       GATEWAY_CATALOG_URL: http://catalog:8120
+      GATEWAY_INVENTORY_URL: http://inventory:9110
       GATEWAY_REDIS_URL: redis://redis:6379
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     # The public entry point; still loopback-only on a dev machine.
@@ -66,5 +67,6 @@ services:
       - "127.0.0.1:${GATEWAY_HTTP_PORT:-8100}:8100"
     depends_on:
       catalog: { condition: service_healthy }
+      inventory: { condition: service_healthy }
       redis: { condition: service_healthy }
       otel-collector: { condition: service_started }

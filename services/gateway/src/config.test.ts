@@ -31,6 +31,7 @@ describe('loadGatewayConfig', () => {
       devAuth: { enabled: false, secret: undefined },
       identity: { keyId: 'gw-1', privateKey },
       catalogUrl: 'http://localhost:8120',
+      inventoryUrl: 'http://localhost:9110',
       redisUrl: 'redis://localhost:6380',
       rateLimit: { perSecond: 20, burst: 40 },
       otlpEndpoint: undefined,

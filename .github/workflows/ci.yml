@@ -41,6 +41,7 @@ jobs:
             node:
               - *workflow
               - "packages/**"
+              - "contracts/gen/ts/**"
               - "services/catalog/**"
               - "services/gateway/**"
               - "apps/**"

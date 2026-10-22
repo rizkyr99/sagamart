@@ -3,3 +3,4 @@ packages:
   - packages/*
   - services/*
   - apps/*
+  - contracts/gen/ts

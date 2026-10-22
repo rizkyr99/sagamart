@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Added
 
+- Browsing and carts (#31, RFC-0005 §4.4):
+  - `GET /v1/categories`, `/v1/products` and `/v1/products/{slug}` with Inventory stock, batched by 100 under a 150 ms deadline, a failed batch marking only its SKUs `UNKNOWN`;
+  - `POST /v1/cart/guest-token` and `GET`, `PUT` and `DELETE` on `/v1/cart` with `available` and `exceedsAvailable`;
+  - a circuit breaker on Catalog;
+  - Inventory over gRPC through the generated `@sagamart/contracts`.
 - Service skeleton (#30, RFC-0005 §4.2, §4.5, §8):
   - zod-validated configuration that refuses dev auth in `prod`;
   - development JWTs (`POST /v1/dev/token`, HS256, one hour) only when `GATEWAY_DEV_AUTH=true`;
