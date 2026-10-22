@@ -12,7 +12,8 @@ import { CATALOG_CONFIG, DYNAMODB } from './tokens.js';
 export function createDynamoClient(config: CatalogConfig): DynamoDBClient {
   return new DynamoDBClient({
     region: config.dynamo.region,
-    maxAttempts: 3, // RFC-0005 §4.4: two retries
+    maxAttempts: 3, // RFC-0005 §4.5: 500 ms per call, two retries
+    requestHandler: { connectionTimeout: 500, requestTimeout: 500 },
     ...(config.dynamo.endpoint
       ? { endpoint: config.dynamo.endpoint, credentials: { accessKeyId: 'local', secretAccessKey: 'local' } }
       : {}),

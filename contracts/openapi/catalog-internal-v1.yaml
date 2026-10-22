@@ -140,6 +140,7 @@ paths:
         "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
         "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
         "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
 
   /internal/v1/carts/{cartKey}/lines/{sku}:
     parameters:
