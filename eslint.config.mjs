@@ -30,6 +30,20 @@ export default tseslint.config(
     files: ['**/*.test.ts'],
     rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
   },
-  // Tool config files aren't part of any tsconfig; lint them without type information.
-  { files: ['**/*.mjs', '**/*.mts'], ...tseslint.configs.disableTypeChecked },
+  // Tool config files and plain-JS test fixtures aren't part of any tsconfig; lint them without type information.
+  { files: ['**/*.mjs', '**/*.mts', '**/*.cjs'], ...tseslint.configs.disableTypeChecked },
+  {
+    files: ['**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        require: 'readonly',
+        module: 'writable',
+        process: 'readonly',
+        console: 'readonly',
+        __dirname: 'readonly',
+      },
+    },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
 );

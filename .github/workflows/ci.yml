@@ -158,6 +158,8 @@ jobs:
         working-directory: services/inventory
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false # this job runs third-party code, which never needs the token
       # v6 honours the toolchain directive, so CI uses the same Go as Docker and local builds.
       - uses: actions/setup-go@v6
         with:
@@ -189,6 +191,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false # this job runs third-party code, which never needs the token
       - uses: pnpm/action-setup@v4 # version from package.json "packageManager"
       - uses: actions/setup-node@v4
         with:

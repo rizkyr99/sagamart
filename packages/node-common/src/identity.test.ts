@@ -227,6 +227,23 @@ describe('verifyIdentity rejects', () => {
     expect(failure(() => verifyIdentity(token, { ...verifyOpts, now: at(-4) }))).toBeUndefined();
   });
 
+  it('reports a misconfigured trusted key as a configuration error, not a bad token', () => {
+    const token = craft(goodHeader, goodClaims);
+    const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 })
+      .publicKey.export({ format: 'der', type: 'spki' })
+      .toString('base64');
+    for (const key of [Buffer.from('not a key').toString('base64'), rsa]) {
+      let error: unknown;
+      try {
+        verifyIdentity(token, { ...verifyOpts, publicKeys: { [kid]: key } });
+      } catch (err) {
+        error = err;
+      }
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(IdentityError);
+    }
+  });
+
   it('ignores claims it does not know (contract versioning)', () => {
     const claims = verifyIdentity(craft(goodHeader, { ...goodClaims, tenant: 'x' }), verifyOpts);
     expect(claims.sub).toBe(userId);

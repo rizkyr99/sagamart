@@ -40,8 +40,14 @@ export function startTelemetry(options: TelemetryOptions): Telemetry {
         : new NoopSpanProcessor(),
     ],
     metricReaders: [prometheus],
+    // Logs go to stdout only (conventions §7). Without an explicit list the SDK falls back to OTEL_LOGS_EXPORTER,
+    // which defaults to OTLP, and the pino instrumentation would forward every log line there.
+    logRecordProcessors: [],
     instrumentations: [
-      getNodeAutoInstrumentations({ '@opentelemetry/instrumentation-fs': { enabled: false } }),
+      getNodeAutoInstrumentations({
+        '@opentelemetry/instrumentation-fs': { enabled: false },
+        '@opentelemetry/instrumentation-pino': { disableLogSending: true },
+      }),
     ],
   });
   sdk.start();

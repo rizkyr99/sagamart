@@ -131,12 +131,14 @@ export function verifyIdentity(token: string, options: VerifyOptions): IdentityC
   if (typeof kid !== 'string' || !Object.hasOwn(options.publicKeys, kid))
     throw new IdentityError('UNKNOWN_KEY');
 
+  // A key that can't be loaded is a configuration error: let it throw loudly rather than look like a bad token.
+  const key = publicKeyFrom(options.publicKeys[kid] ?? '');
   let valid: boolean;
   try {
     valid = verify(
       null,
       Buffer.from(`${headerPart}.${claimsPart}`),
-      publicKeyFrom(options.publicKeys[kid] ?? ''),
+      key,
       Buffer.from(signaturePart, 'base64url'),
     );
   } catch {
