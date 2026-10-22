@@ -35,6 +35,8 @@ make up
 
 `make up` copies `deploy/compose/.env.example` to `deploy/compose/.env` on first run. Edit `.env` to change ports or credentials; it is never committed.
 
+Run `make identity-keys` once: it writes the local Ed25519 key pair the gateway signs internal identities with, and that services verify (`contracts/identity.md`). `make demo` refuses to start Catalog without it.
+
 `make up` starts infrastructure only, so you can run the service you're working on from source (`make run` in its folder). `make demo` builds and starts every service as well.
 
 ### Local ports
@@ -52,6 +54,8 @@ make up
 | Jaeger UI | 16686 |
 | Grafana | 3001 |
 | Inventory — HTTP (probes, metrics) / gRPC | 8110 / 9110 |
+| Catalog — internal API, probes, metrics | 8120 |
+| Gateway — public API (from #30) | 8100 |
 
 ## Workflow
 

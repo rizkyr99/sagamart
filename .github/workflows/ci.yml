@@ -210,6 +210,8 @@ jobs:
         run: pnpm test
       - name: Dependency audit (high and critical)
         run: pnpm audit --audit-level high
+      - name: Catalog image builds
+        run: docker build -f services/catalog/Dockerfile -t sagamart-catalog:ci .
 
   # ---- Gate ----
 

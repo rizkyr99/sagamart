@@ -1,8 +1,9 @@
 # Docker builds use the repository root as context; send only what images need.
 **/.env
 **/node_modules
-**/target
 **/dist
+**/coverage
+**/target
 **/bin
 .git
 docs

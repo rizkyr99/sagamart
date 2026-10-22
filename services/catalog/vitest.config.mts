@@ -8,6 +8,10 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     testTimeout: 60_000,
     hookTimeout: 180_000,
-    coverage: { provider: 'v8', include: ['src/**/*.ts'], exclude: ['src/**/*.test.ts', 'src/main.ts', 'src/instrument.ts'] },
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/*.test.ts', 'src/main.ts', 'src/instrument.ts'],
+    },
   },
 });

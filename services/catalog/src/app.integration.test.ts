@@ -1,4 +1,5 @@
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import type { Server } from 'node:http';
 import { PassThrough } from 'node:stream';
 import { DescribeTableCommand, DescribeTimeToLiveCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Controller, Get, Req } from '@nestjs/common';
@@ -49,19 +50,23 @@ const userId = '0199f2e0-0000-7000-8000-000000000001';
 
 function token(opts: { roles?: string[]; audience?: string; now?: Date; subject?: string } = {}): string {
   return signIdentity({
-    privateKey, keyId: kid, audience: opts.audience ?? 'catalog', roles: opts.roles ?? ['buyer'],
-    subject: opts.subject ?? userId, ...(opts.now ? { now: opts.now } : {}),
+    privateKey,
+    keyId: kid,
+    audience: opts.audience ?? 'catalog',
+    roles: opts.roles ?? ['buyer'],
+    subject: opts.subject ?? userId,
+    ...(opts.now ? { now: opts.now } : {}),
   });
 }
 
-let pgContainer: StartedPostgreSqlContainer;
-let dynamo: StartedTestContainer;
-let app: INestApplication;
+let pgContainer: StartedPostgreSqlContainer | undefined;
+let dynamo: StartedTestContainer | undefined;
+let app: INestApplication | undefined;
 let dbUrl: string;
 let dynamoEndpoint: string;
 
 beforeAll(async () => {
-  [pgContainer, dynamo] = await Promise.all([
+  const [startedPg, startedDynamo] = await Promise.all([
     new PostgreSqlContainer('postgres:17.2-alpine').withDatabase('catalog').start(),
     new GenericContainer('amazon/dynamodb-local:2.5.2')
       .withCommand(['-jar', 'DynamoDBLocal.jar', '-inMemory', '-sharedDb'])
@@ -69,8 +74,10 @@ beforeAll(async () => {
       .withWaitStrategy(Wait.forListeningPorts())
       .start(),
   ]);
-  dbUrl = pgContainer.getConnectionUri();
-  dynamoEndpoint = `http://${dynamo.getHost()}:${String(dynamo.getMappedPort(8000))}`;
+  pgContainer = startedPg;
+  dynamo = startedDynamo;
+  dbUrl = startedPg.getConnectionUri();
+  dynamoEndpoint = `http://${startedDynamo.getHost()}:${String(startedDynamo.getMappedPort(8000))}`;
 
   const config = loadCatalogConfig({
     CATALOG_ENV: 'test',
@@ -91,10 +98,14 @@ beforeAll(async () => {
     ],
     controllers: [TestController],
   }).compile();
-  app = moduleRef.createNestApplication();
-  configureApp(app);
-  await app.init();
+  const created = moduleRef.createNestApplication();
+  configureApp(created);
+  await created.init();
+  app = created;
 });
+
+/** The app's HTTP server, for supertest. */
+const http = (): Server => app!.getHttpServer() as Server;
 
 afterAll(async () => {
   await app?.close();
@@ -115,7 +126,10 @@ describe('startup', () => {
       const category = randomUUID();
       await client.query(`INSERT INTO categories (id, slug, name) VALUES ($1, 'kaos', 'Kaos')`, [category]);
       await expect(
-        client.query(`INSERT INTO products (id, slug, name, category_id, status) VALUES ($1, 'p', 'P', $2, 'ACTIVE')`, [randomUUID(), category]),
+        client.query(
+          `INSERT INTO products (id, slug, name, category_id, status) VALUES ($1, 'p', 'P', $2, 'ACTIVE')`,
+          [randomUUID(), category],
+        ),
       ).rejects.toMatchObject({ constraint: 'active_has_price' });
     } finally {
       await client.end();
@@ -123,7 +137,11 @@ describe('startup', () => {
   });
 
   it('creates the carts table with TTL on the ttl attribute (ADR-0009)', async () => {
-    const ddb = new DynamoDBClient({ endpoint: dynamoEndpoint, region: 'ap-southeast-3', credentials: { accessKeyId: 'local', secretAccessKey: 'local' } });
+    const ddb = new DynamoDBClient({
+      endpoint: dynamoEndpoint,
+      region: 'ap-southeast-3',
+      credentials: { accessKeyId: 'local', secretAccessKey: 'local' },
+    });
     const table = await ddb.send(new DescribeTableCommand({ TableName: 'carts' }));
     expect(table.Table?.TableStatus).toBe('ACTIVE');
     expect(table.Table?.KeySchema).toEqual([{ AttributeName: 'pk', KeyType: 'HASH' }]);
@@ -135,19 +153,19 @@ describe('startup', () => {
 
 describe('probes and metrics', () => {
   it('serves /healthz and /readyz without an identity', async () => {
-    await request(app.getHttpServer()).get('/healthz').expect(200, { status: 'ok' });
-    await request(app.getHttpServer()).get('/readyz').expect(200, { status: 'ok' });
+    await request(http()).get('/healthz').expect(200, { status: 'ok' });
+    await request(http()).get('/readyz').expect(200, { status: 'ok' });
   });
 
   it('serves /metrics from the telemetry handler', async () => {
-    const res = await request(app.getHttpServer()).get('/metrics').expect(200);
+    const res = await request(http()).get('/metrics').expect(200);
     expect(res.text).toContain('sagamart_catalog_test_total 1');
   });
 });
 
 describe('identity on /internal routes (contracts/identity.md)', () => {
   const get = (path: string, identity?: string) => {
-    const r = request(app.getHttpServer()).get(path);
+    const r = request(http()).get(path);
     return identity === undefined ? r : r.set('x-sagamart-identity', identity);
   };
 
@@ -167,6 +185,12 @@ describe('identity on /internal routes (contracts/identity.md)', () => {
     expect(res.body).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' });
   });
 
+  it('requires an identity before routing, so unknown internal routes are 401, not 404', async () => {
+    const anonymous = await get('/internal/v1/no-such-route').expect(401);
+    expect(anonymous.body).toMatchObject({ code: 'UNAUTHENTICATED' });
+    await get('/internal/v1/no-such-route', token()).expect(404);
+  });
+
   it('enforces roles: buyer gets 403, admin gets through', async () => {
     const denied = await get('/internal/v1/test/admin', token({ roles: ['buyer'] })).expect(403);
     expect(denied.body).toMatchObject({ code: 'FORBIDDEN' });
@@ -176,18 +200,30 @@ describe('identity on /internal routes (contracts/identity.md)', () => {
 
 describe('errors are Problem Details', () => {
   it('renders a ProblemError as is', async () => {
-    const res = await request(app.getHttpServer()).get('/internal/v1/test/conflict').set('x-sagamart-identity', token()).expect(409);
-    expect(res.body).toMatchObject({ type: 'https://sagamart.dev/errors/slug-taken', status: 409, code: 'SLUG_TAKEN', detail: 'kaos-polos is taken.', instance: '/internal/v1/test/conflict' });
+    const res = await request(http())
+      .get('/internal/v1/test/conflict')
+      .set('x-sagamart-identity', token())
+      .expect(409);
+    expect(res.body).toMatchObject({
+      type: 'https://sagamart.dev/errors/slug-taken',
+      status: 409,
+      code: 'SLUG_TAKEN',
+      detail: 'kaos-polos is taken.',
+      instance: '/internal/v1/test/conflict',
+    });
   });
 
   it('renders an unknown route as 404 NOT_FOUND', async () => {
-    const res = await request(app.getHttpServer()).get('/nowhere').expect(404);
+    const res = await request(http()).get('/nowhere').expect(404);
     expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
     expect(res.body).toMatchObject({ status: 404, code: 'NOT_FOUND' });
   });
 
   it('hides internal error details behind 500 INTERNAL_ERROR', async () => {
-    const res = await request(app.getHttpServer()).get('/internal/v1/test/boom').set('x-sagamart-identity', token()).expect(500);
+    const res = await request(http())
+      .get('/internal/v1/test/boom')
+      .set('x-sagamart-identity', token())
+      .expect(500);
     expect(res.body).toMatchObject({ status: 500, code: 'INTERNAL_ERROR' });
     expect(JSON.stringify(res.body)).not.toContain('hunter2');
   });
