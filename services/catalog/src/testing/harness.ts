@@ -17,7 +17,8 @@ export interface TokenOptions {
   roles?: string[];
   audience?: string;
   now?: Date;
-  subject?: string;
+  /** The user ID; null signs a guest identity, which has none. */
+  subject?: string | null;
 }
 
 /** A running Catalog against real Postgres and DynamoDB Local, with a gateway key to sign identities. */
@@ -45,7 +46,7 @@ export function token(opts: TokenOptions = {}): string {
     keyId: kid,
     audience: opts.audience ?? 'catalog',
     roles: opts.roles ?? ['buyer'],
-    subject: opts.subject ?? userId,
+    ...(opts.subject === null ? {} : { subject: opts.subject ?? userId }),
     ...(opts.now ? { now: opts.now } : {}),
   });
 }
