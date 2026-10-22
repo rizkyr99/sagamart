@@ -1,0 +1,184 @@
+# Catalog resource shapes shared by the public API (which adds stock) and Catalog's internal API.
+components:
+  schemas:
+    CategoryRef:
+      type: object
+      required: [id, slug, name]
+      properties:
+        id: { type: string, format: uuid, example: 0199f2d0-1a2b-7c3d-8e4f-5a6b7c8d9e01 }
+        slug: { $ref: "common-v1.yaml#/components/schemas/Slug" }
+        name: { type: string, example: Kaos }
+
+    ProductSummaryBase:
+      type: object
+      required: [id, slug, name, category, imageUrl, fromPrice]
+      properties:
+        id: { type: string, format: uuid, example: 0199f2d1-2b3c-7d4e-9f50-6a7b8c9d0e12 }
+        slug: { $ref: "common-v1.yaml#/components/schemas/Slug" }
+        name: { type: string, example: Kaos Polos Hitam }
+        category: { $ref: "#/components/schemas/CategoryRef" }
+        imageUrl: { type: [string, "null"], format: uri, description: "The first image, if any." }
+        fromPrice: { $ref: "common-v1.yaml#/components/schemas/PositiveMoney", description: "The lowest active SKU price." }
+
+    ProductDetailBase:
+      type: object
+      required: [id, slug, name, description, category, imageUrls, fromPrice]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { $ref: "common-v1.yaml#/components/schemas/Slug" }
+        name: { type: string }
+        description: { type: string }
+        category: { $ref: "#/components/schemas/CategoryRef" }
+        imageUrls:
+          type: array
+          maxItems: 10
+          items: { type: string, format: uri }
+        fromPrice: { $ref: "common-v1.yaml#/components/schemas/PositiveMoney" }
+
+    SkuBase:
+      type: object
+      required: [sku, name, price]
+      properties:
+        sku: { $ref: "common-v1.yaml#/components/schemas/Sku" }
+        name: { type: string, description: "The variant label.", example: M / Hitam }
+        price: { $ref: "common-v1.yaml#/components/schemas/PositiveMoney" }
+
+    # ---- Admin ----
+
+    AdminSku:
+      type: object
+      required: [sku, productId, name, price, status, version, createdAt, updatedAt]
+      properties:
+        sku: { $ref: "common-v1.yaml#/components/schemas/Sku" }
+        productId: { type: string, format: uuid }
+        name: { type: string }
+        price: { $ref: "common-v1.yaml#/components/schemas/PositiveMoney" }
+        status: { $ref: "common-v1.yaml#/components/schemas/SkuStatus" }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AdminProduct:
+      type: object
+      required: [id, slug, name, description, category, imageUrls, status, version, createdAt, updatedAt, skus]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { $ref: "common-v1.yaml#/components/schemas/Slug" }
+        name: { type: string }
+        description: { type: string }
+        category: { $ref: "#/components/schemas/CategoryRef" }
+        imageUrls: { type: array, items: { type: string, format: uri } }
+        status: { $ref: "common-v1.yaml#/components/schemas/ProductStatus" }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        skus:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/AdminSku" }
+
+    AdminProductPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AdminProduct" } }
+        nextCursor: { type: [string, "null"] }
+
+    SkuCreate:
+      type: object
+      required: [sku, name, price]
+      properties:
+        sku: { $ref: "common-v1.yaml#/components/schemas/Sku" }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        price: { $ref: "common-v1.yaml#/components/schemas/PositiveMoney" }
+      additionalProperties: false
+
+    ProductCreate:
+      type: object
+      required: [slug, name, categoryId, skus]
+      properties:
+        slug: { $ref: "common-v1.yaml#/components/schemas/Slug" }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 5000, default: "" }
+        categoryId: { type: string, format: uuid }
+        imageUrls: { type: array, maxItems: 10, items: { type: string, format: uri, maxLength: 2048 }, default: [] }
+        status:
+          description: '`ACTIVE` needs at least one SKU (always true here); `ARCHIVED` cannot be created.'
+          type: string
+          enum: [DRAFT, ACTIVE]
+          default: DRAFT
+        skus:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: "#/components/schemas/SkuCreate" }
+      additionalProperties: false
+
+    ProductPatch:
+      description: Only the fields present change. `status` → `ACTIVE` needs an active SKU (`422 PRODUCT_NEEDS_ACTIVE_SKU`).
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 5000 }
+        categoryId: { type: string, format: uuid }
+        imageUrls: { type: array, maxItems: 10, items: { type: string, format: uri, maxLength: 2048 } }
+        status: { $ref: "common-v1.yaml#/components/schemas/ProductStatus" }
+      additionalProperties: false
+
+    SkuPatch:
+      description: Archiving the last active SKU of an active product is `422 PRODUCT_NEEDS_ACTIVE_SKU`.
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        price: { $ref: "common-v1.yaml#/components/schemas/PositiveMoney" }
+        status: { $ref: "common-v1.yaml#/components/schemas/SkuStatus" }
+      additionalProperties: false
+
+    CategoryCreate:
+      type: object
+      required: [slug, name]
+      properties:
+        slug: { $ref: "common-v1.yaml#/components/schemas/Slug" }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        parentId: { type: [string, "null"], format: uuid, default: null }
+        position: { type: integer, minimum: 0, default: 0 }
+      additionalProperties: false
+
+    CategoryPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        parentId: { type: [string, "null"], format: uuid }
+        position: { type: integer, minimum: 0 }
+      additionalProperties: false
+
+  examples:
+    ProductCreate:
+      value:
+        slug: kaos-polos-hitam
+        name: Kaos Polos Hitam
+        description: Kaos katun 100%, potongan reguler.
+        categoryId: 0199f2d0-1a2b-7c3d-8e4f-5a6b7c8d9e01
+        imageUrls: ["https://images.sagamart.dev/kaos-polos-hitam-1.jpg"]
+        status: ACTIVE
+        skus:
+          - { sku: KAOS-001-M, name: M / Hitam, price: { amount: 79000, currency: IDR } }
+          - { sku: KAOS-001-L, name: L / Hitam, price: { amount: 79000, currency: IDR } }
+    AdminProduct:
+      value:
+        id: 0199f2d1-2b3c-7d4e-9f50-6a7b8c9d0e12
+        slug: kaos-polos-hitam
+        name: Kaos Polos Hitam
+        description: Kaos katun 100%, potongan reguler.
+        category: { id: 0199f2d0-1a2b-7c3d-8e4f-5a6b7c8d9e01, slug: kaos, name: Kaos }
+        imageUrls: ["https://images.sagamart.dev/kaos-polos-hitam-1.jpg"]
+        status: ACTIVE
+        version: 1
+        createdAt: "2026-10-22T03:00:00.000Z"
+        updatedAt: "2026-10-22T03:00:00.000Z"
+        skus:
+          - { sku: KAOS-001-M, productId: 0199f2d1-2b3c-7d4e-9f50-6a7b8c9d0e12, name: M / Hitam, price: { amount: 79000, currency: IDR }, status: ACTIVE, version: 1, createdAt: "2026-10-22T03:00:00.000Z", updatedAt: "2026-10-22T03:00:00.000Z" }
+          - { sku: KAOS-001-L, productId: 0199f2d1-2b3c-7d4e-9f50-6a7b8c9d0e12, name: L / Hitam, price: { amount: 79000, currency: IDR }, status: ACTIVE, version: 1, createdAt: "2026-10-22T03:00:00.000Z", updatedAt: "2026-10-22T03:00:00.000Z" }

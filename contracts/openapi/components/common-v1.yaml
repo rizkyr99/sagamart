@@ -1,0 +1,210 @@
+# Types shared by the public API and Catalog's internal API. Referenced with relative $refs.
+components:
+  schemas:
+    Problem:
+      description: RFC 9457 Problem Details (conventions §4). `code` is the stable machine-readable reason.
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: { type: string, format: uri, example: "https://sagamart.dev/errors/cart-line-limit" }
+        title: { type: string, example: Cart line limit reached }
+        status: { type: integer, minimum: 400, maximum: 599, example: 422 }
+        detail: { type: string, example: A cart holds at most 50 lines. }
+        instance: { type: string, example: /v1/cart/lines/KAOS-001-M }
+        code: { type: string, pattern: "^[A-Z][A-Z0-9_]*$", example: CART_LINE_LIMIT }
+        traceId: { type: string, pattern: "^[0-9a-f]{32}$", example: 4bf92f3577b34da6a3ce929d0e0e4736 }
+        errors:
+          description: Present on validation failures, one entry per invalid field.
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string, example: "skus[0].price.amount" }
+              message: { type: string, example: must be at least 1 }
+      additionalProperties: true
+
+    Money:
+      description: Whole rupiah. Never fractional (conventions §3).
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, format: int64, minimum: 0, example: 150000 }
+        currency: { type: string, const: IDR }
+      additionalProperties: false
+
+    PositiveMoney:
+      allOf:
+        - $ref: "#/components/schemas/Money"
+        - type: object
+          properties:
+            amount: { type: integer, format: int64, minimum: 1 }
+
+    Sku:
+      description: SKU code shared with Inventory.
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: "^\\S+$"
+      example: KAOS-001-M
+
+    Slug:
+      type: string
+      minLength: 1
+      maxLength: 120
+      pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      example: kaos-polos-hitam
+
+    Category:
+      type: object
+      required: [id, slug, name, parentId, position]
+      properties:
+        id: { type: string, format: uuid, example: 0199f2d0-1a2b-7c3d-8e4f-5a6b7c8d9e01 }
+        slug: { $ref: "#/components/schemas/Slug" }
+        name: { type: string, minLength: 1, maxLength: 200, example: Kaos }
+        parentId: { type: [string, "null"], format: uuid, example: null }
+        position: { type: integer, minimum: 0, example: 0 }
+      additionalProperties: false
+
+    CategoryList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+      additionalProperties: false
+
+    ProductStatus:
+      type: string
+      enum: [DRAFT, ACTIVE, ARCHIVED]
+
+    SkuStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+
+    SortOrder:
+      type: string
+      enum: [newest, price_asc, price_desc]
+      default: newest
+
+  parameters:
+    Category:
+      name: category
+      in: query
+      description: Category slug.
+      schema: { $ref: "#/components/schemas/Slug" }
+    MinPrice:
+      name: minPrice
+      in: query
+      description: Only products whose lowest active SKU price is at least this many rupiah.
+      schema: { type: integer, format: int64, minimum: 0 }
+    MaxPrice:
+      name: maxPrice
+      in: query
+      description: Only products whose lowest active SKU price is at most this many rupiah.
+      schema: { type: integer, format: int64, minimum: 0 }
+    Sort:
+      name: sort
+      in: query
+      schema: { $ref: "#/components/schemas/SortOrder" }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque `nextCursor` from the previous page. Bound to the query; reusing it with other filters is `400 CURSOR_MISMATCH`.
+      schema: { type: string, maxLength: 512 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-chosen key, unique per logical operation. Retries with the same key and body get the original response for 24 hours.
+      schema: { type: string, minLength: 8, maxLength: 128, pattern: "^[A-Za-z0-9._:-]+$" }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: The resource's current `version`, as returned in its `ETag` (`"<version>"`).
+      schema: { type: string, pattern: "^\"[0-9]+\"$", example: "\"3\"" }
+
+  headers:
+    ETag:
+      description: The resource's version, for `If-Match`.
+      schema: { type: string, example: "\"3\"" }
+    RetryAfter:
+      description: Seconds to wait before retrying.
+      schema: { type: integer, minimum: 1, example: 2 }
+
+  responses:
+    BadRequest:
+      description: Malformed request or failed validation (`VALIDATION_FAILED`, `CURSOR_MISMATCH`).
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+          example:
+            type: https://sagamart.dev/errors/validation-failed
+            title: Validation failed
+            status: 400
+            code: VALIDATION_FAILED
+            errors: [{ field: limit, message: must not be greater than 50 }]
+    Unauthorized:
+      description: Missing, invalid or expired credentials (`UNAUTHENTICATED`).
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+          example: { type: "https://sagamart.dev/errors/unauthenticated", title: Unauthenticated, status: 401, code: UNAUTHENTICATED }
+    Forbidden:
+      description: Authenticated but not allowed (`FORBIDDEN`).
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+          example: { type: "https://sagamart.dev/errors/forbidden", title: Forbidden, status: 403, code: FORBIDDEN, detail: Requires the admin role. }
+    NotFound:
+      description: The resource doesn't exist or isn't visible to the caller (`NOT_FOUND`, `SKU_NOT_FOUND`).
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+          example: { type: "https://sagamart.dev/errors/not-found", title: Not found, status: 404, code: NOT_FOUND }
+    Conflict:
+      description: Conflicts with current state (`SLUG_TAKEN`, `SKU_TAKEN`, idempotent request still in progress).
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+          example: { type: "https://sagamart.dev/errors/slug-taken", title: Slug already in use, status: 409, code: SLUG_TAKEN }
+    PreconditionFailed:
+      description: '`If-Match` is not the current version (`VERSION_CONFLICT`). The body carries `currentVersion`.'
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+          example: { type: "https://sagamart.dev/errors/version-conflict", title: Version conflict, status: 412, code: VERSION_CONFLICT, currentVersion: 4 }
+    PreconditionRequired:
+      description: '`If-Match` is required on this operation (`IF_MATCH_REQUIRED`).'
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+          example: { type: "https://sagamart.dev/errors/if-match-required", title: If-Match required, status: 428, code: IF_MATCH_REQUIRED }
+    Unprocessable:
+      description: Valid request that business rules reject (`CART_LINE_LIMIT`, `IDEMPOTENCY_KEY_REUSED`, `PRODUCT_NEEDS_ACTIVE_SKU`, `SKU_LIMIT`).
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+          example: { type: "https://sagamart.dev/errors/idempotency-key-reused", title: Idempotency key reused, status: 422, code: IDEMPOTENCY_KEY_REUSED, detail: This key was used with a different request body. }
+    TooManyRequests:
+      description: Rate limited (`RATE_LIMITED`).
+      headers:
+        Retry-After: { $ref: "#/components/headers/RetryAfter" }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+          example: { type: "https://sagamart.dev/errors/rate-limited", title: Too many requests, status: 429, code: RATE_LIMITED }
+    Unavailable:
+      description: A dependency is unavailable; safe to retry (`DEPENDENCY_UNAVAILABLE`).
+      headers:
+        Retry-After: { $ref: "#/components/headers/RetryAfter" }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+          example: { type: "https://sagamart.dev/errors/dependency-unavailable", title: Service unavailable, status: 503, code: DEPENDENCY_UNAVAILABLE }

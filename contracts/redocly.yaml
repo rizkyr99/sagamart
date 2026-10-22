@@ -1,0 +1,23 @@
+# OpenAPI lint configuration. Run: make contracts-openapi
+apis:
+  public@v1:
+    root: openapi/public-v1.yaml
+  catalog-internal@v1:
+    root: openapi/catalog-internal-v1.yaml
+
+extends:
+  - recommended-strict
+
+rules:
+  # Every example must match its schema, with no undeclared properties.
+  no-invalid-media-type-examples:
+    severity: error
+    allowAdditionalProperties: false
+  no-invalid-parameter-examples: error
+  no-invalid-schema-examples: error
+  operation-4xx-response: error
+  operation-operationId-unique: error
+  # The internal API's colon path (/skus:lookup) is a deliberate Google-style custom method.
+  path-segment-plural: off
+  # Servers are local-only examples.
+  no-server-example.com: off
