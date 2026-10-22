@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Author** | Rizky |
-| **Status** | In review |
+| **Status** | Accepted |
 | **Created** | 2026-10-22 |
 | **Stage** | 1 First slice |
 | **Related** | PRD [FR-01, FR-03, FR-04, FR-11, J1, J2, J5](../product/prd.md), [System Design §3, §7](../architecture/system-design.md), [Context Map](../architecture/context-map.md), [ADR-0002](../adr/0002-polyglot-service-languages.md), [ADR-0004](../adr/0004-database-per-service.md), [ADR-0007](../adr/0007-cart-in-dynamodb.md), [RFC-0001](0001-inventory-reservation.md), issue #17 |
@@ -280,13 +280,18 @@ Nothing outside these services changes. Each step merges independently.
 
 ## 11. Open questions
 
-- [ ] **JS workspace tooling:** pnpm workspaces with a shared `packages/node-common` (proposed), or npm workspaces? Either needs a `packages/` folder, which conventions §1 doesn't have yet.
-- [ ] **Guest cart token transport:** the `X-Cart-Token` header (proposed; the future web app can keep it in an httpOnly cookie on its own side), or a cookie set by the gateway now?
-- [ ] **Catalog events:** publish `catalog.product.*` through an outbox in Stage 1 even though nothing consumes them until Stage 3, or add them with RFC-0003 (proposed)?
-- [ ] **`LOW_STOCK` threshold:** a fixed 5 units (proposed), or configurable per product?
+- [x] **JS workspace tooling:** **pnpm workspaces** with a shared `packages/node-common`. See the decision log.
+- [x] **Guest cart token transport:** **the `X-Cart-Token` header.**
+- [x] **Catalog events:** **deferred to RFC-0003** (Stage 3).
+- [x] **`LOW_STOCK` threshold:** **a fixed 5 units** for the MVP.
 
 ## 12. Decision log
 
 | Date | Decision | Notes |
 |---|---|---|
 | 2026-10-22 | Draft opened | |
+| 2026-10-22 | pnpm workspaces, with shared code in `packages/node-common` | Both Node services need the same logger, OTel setup, config validation, Problem Details and identity code. pnpm is fast and strict about undeclared dependencies. Conventions §1 gains a `packages/` folder in the workspace PR. |
+| 2026-10-22 | Guest carts identified by the `X-Cart-Token` header | One API for every client (k6, scripts, the future web app). A gateway-set cookie would need CSRF protection; the web app can keep the token in an httpOnly cookie on its own side. |
+| 2026-10-22 | No catalog events in Stage 1 | Nothing consumes them until the search indexer (Stage 3). Event design belongs in RFC-0003, and adding them then is additive. |
+| 2026-10-22 | `LOW_STOCK` means 5 or fewer units available, fixed | Enough for the MVP; a per-product threshold can be added later without a contract change. |
+| 2026-10-22 | Accepted | Self-review plus automated PR review (CodeRabbit); no outside reviewer available. |
