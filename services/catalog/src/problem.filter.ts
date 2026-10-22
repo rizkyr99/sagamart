@@ -44,6 +44,8 @@ export class ProblemFilter implements ExceptionFilter {
       instance: body.instance ?? request.originalUrl,
       ...(span && isSpanContextValid(span) ? { traceId: span.traceId } : {}),
     };
+    // Unavailable means "retry": say when (contracts: Unavailable carries Retry-After).
+    if (rendered.status === 503) response.setHeader('Retry-After', '1');
     response
       .status(rendered.status)
       .setHeader('content-type', 'application/problem+json; charset=utf-8')

@@ -12,6 +12,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { createLogger } from '@sagamart/node-common';
 import { LoggerModule } from 'nestjs-pino';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { CartController } from './cart/cart.controller.js';
+import { CartStore } from './cart/cart.store.js';
 import { CatalogModule } from './catalog/catalog.module.js';
 import type { CatalogConfig } from './config.js';
 import { DynamoLifecycle, createDynamoClient } from './dynamo.js';
@@ -77,7 +79,7 @@ export class AppModule implements NestModule {
         }),
         CatalogModule,
       ],
-      controllers: [HealthController],
+      controllers: [HealthController, CartController],
       providers: [
         { provide: CATALOG_CONFIG, useValue: config },
         {
@@ -91,6 +93,7 @@ export class AppModule implements NestModule {
         },
         { provide: DYNAMODB, useFactory: () => createDynamoClient(config) },
         DynamoLifecycle,
+        CartStore,
         { provide: ShutdownHook, useFactory: () => new ShutdownHook(options.onShutdown) },
         { provide: APP_GUARD, useClass: RolesGuard },
       ],
