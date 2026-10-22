@@ -53,7 +53,8 @@ export function token(opts: TokenOptions = {}): string {
 export async function startHarness(
   options: { controllers?: Type[]; app?: Partial<AppOptions> } = {},
 ): Promise<Harness> {
-  const [postgres, dynamo] = await Promise.all([
+  // allSettled, so a container that did start is stopped when the other fails.
+  const [startedPg, startedDynamo] = await Promise.allSettled([
     new PostgreSqlContainer('postgres:17.2-alpine').withDatabase('catalog').start(),
     new GenericContainer('amazon/dynamodb-local:2.5.2')
       .withCommand(['-jar', 'DynamoDBLocal.jar', '-inMemory', '-sharedDb'])
@@ -61,6 +62,14 @@ export async function startHarness(
       .withWaitStrategy(Wait.forListeningPorts())
       .start(),
   ]);
+  if (startedPg.status === 'rejected' || startedDynamo.status === 'rejected') {
+    const results = [startedPg, startedDynamo];
+    await Promise.all(results.flatMap((r) => (r.status === 'fulfilled' ? [r.value.stop()] : [])));
+    const reasons = results.flatMap((r): unknown[] => (r.status === 'rejected' ? [r.reason] : []));
+    throw new AggregateError(reasons, 'test containers failed to start');
+  }
+  const postgres = startedPg.value;
+  const dynamo = startedDynamo.value;
   const dbUrl = postgres.getConnectionUri();
   const dynamoEndpoint = `http://${dynamo.getHost()}:${String(dynamo.getMappedPort(8000))}`;
   const config = (overrides: Record<string, string> = {}) =>
@@ -72,25 +81,34 @@ export async function startHarness(
       ...overrides,
     });
 
-  const moduleRef = await Test.createTestingModule({
-    imports: [AppModule.forRoot({ config: config(), logDestination: new PassThrough(), ...options.app })],
-    controllers: options.controllers ?? [],
-  }).compile();
-  const app = moduleRef.createNestApplication();
-  configureApp(app);
-  await app.init();
+  // The caller only gets close() once this returns, so a failure from here on cleans up itself.
+  let app: INestApplication | undefined;
+  try {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule.forRoot({ config: config(), logDestination: new PassThrough(), ...options.app })],
+      controllers: options.controllers ?? [],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    configureApp(app);
+    await app.init();
+  } catch (err) {
+    await app?.close().catch(() => undefined);
+    await Promise.all([postgres.stop(), dynamo.stop()]);
+    throw err;
+  }
+  const started = app;
   const sql = new pg.Pool({ connectionString: dbUrl, max: 4 });
 
   return {
-    app,
-    http: () => app.getHttpServer() as Server,
+    app: started,
+    http: () => started.getHttpServer() as Server,
     dbUrl,
     dynamoEndpoint,
     sql,
     config,
     token,
     close: async () => {
-      await app.close();
+      await started.close();
       await sql.end();
       await Promise.all([postgres.stop(), dynamo.stop()]);
     },
