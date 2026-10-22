@@ -2,6 +2,11 @@
 useDefault = true
 
 # Dev-only credentials for local Docker Compose are intentionally committed in .env.example files.
+# The identity test fixture is a token signed with a throwaway key made only for that test; it proves Go accepts
+# what the Node gateway signs, and is worthless anywhere else.
 [allowlist]
-description = "Local development examples"
-paths = ['''(^|/)\.env\.example$''']
+description = "Local development examples and test fixtures"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''^services/inventory/internal/identity/testdata/gateway-token\.json$''',
+]
