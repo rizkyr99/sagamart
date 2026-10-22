@@ -1,4 +1,5 @@
-# Generated Go code is committed under gen/go (its own Go module) so services build without a codegen step.
+# Generated Go code is committed under gen/go (its own Go module) and TypeScript under gen/ts (the workspace package
+# @sagamart/contracts), so services build without a codegen step.
 # CI regenerates it and fails on any diff. Java code is generated at build time by the Order service.
 version: v2
 plugins:
@@ -8,3 +9,6 @@ plugins:
   - remote: buf.build/grpc/go:v1.5.1
     out: gen/go
     opt: paths=source_relative
+  - remote: buf.build/bufbuild/es:v2.16.0
+    out: gen/ts/src
+    opt: [target=ts, import_extension=js]

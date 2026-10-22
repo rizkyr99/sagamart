@@ -16,9 +16,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AuthMiddleware, RateLimitMiddleware, RolesGuard } from './auth.js';
 import type { GatewayConfig } from './config.js';
 import { DEADLINES } from './deadline.js';
+import { BrowseController } from './browse.controller.js';
+import { CartController } from './cart.controller.js';
+import { CatalogClient } from './catalog-client.js';
 import { DevController } from './dev.controller.js';
 import { HealthController } from './health.controller.js';
 import { InternalClient } from './internal-client.js';
+import { InventoryClient } from './inventory-client.js';
 import { ProblemFilter } from './problem.filter.js';
 import { RateLimiter, bucketClient } from './rate-limit.js';
 import { GATEWAY_CONFIG, METRICS_HANDLER, RATE_LIMITER, REDIS } from './tokens.js';
@@ -115,7 +119,12 @@ export class AppModule implements NestModule {
         }),
       ],
       // The dev token route exists only when dev auth is on (RFC-0005 §8).
-      controllers: [HealthController, ...(config.devAuth.enabled ? [DevController] : [])],
+      controllers: [
+        HealthController,
+        BrowseController,
+        CartController,
+        ...(config.devAuth.enabled ? [DevController] : []),
+      ],
       providers: [
         { provide: GATEWAY_CONFIG, useValue: config },
         {
@@ -130,13 +139,15 @@ export class AppModule implements NestModule {
         { provide: REDIS, useValue: redis },
         { provide: RATE_LIMITER, useValue: new RateLimiter(bucketClient(redis), config.rateLimit) },
         InternalClient,
+        CatalogClient,
+        InventoryClient,
         AuthMiddleware,
         RateLimitMiddleware,
         { provide: RedisReady, useFactory: () => new RedisReady(redis) },
         { provide: ShutdownHook, useFactory: () => new ShutdownHook(redis, options.onShutdown) },
         { provide: APP_GUARD, useClass: RolesGuard },
       ],
-      exports: [GATEWAY_CONFIG, InternalClient],
+      exports: [GATEWAY_CONFIG, InternalClient, CatalogClient, InventoryClient],
     };
   }
 }

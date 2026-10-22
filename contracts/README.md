@@ -9,6 +9,7 @@ The source of truth for every interface between Sagamart components. Code is gen
 | [`identity.md`](identity.md) | The `x-sagamart-identity` token the gateway signs and every service verifies | Review; implemented in `packages/node-common` and Inventory |
 | [`events/`](events/) | Event envelope, one JSON Schema per event type and version, and an example of each | `make contracts-events` |
 | [`gen/go/`](gen/go/) | Generated Go code (module `github.com/rizkyr99/sagamart/contracts/gen/go`), committed | `make contracts-generate`; CI fails if it is stale |
+| [`gen/ts/`](gen/ts/) | Generated TypeScript (protobuf-es), the workspace package `@sagamart/contracts`, committed | `make contracts-generate`; CI fails if it is stale |
 
 ## Current contracts
 
@@ -25,7 +26,7 @@ The source of truth for every interface between Sagamart components. Code is gen
 
 Each event schema in `events/schemas/<event-type>.v<major>.schema.json` describes the whole event: it extends the envelope and pins `type`, `source`, `dataschema` and the shape of `data`. A matching example lives in `events/examples/<event-type>.v<major>.json`, so producers can validate what they emit and consumers can test parsing.
 
-Go services import generated code from `contracts/gen/go`; Java (Order) generates its own at build time from `proto/`.
+Go services import generated code from `contracts/gen/go`, and Node services from `@sagamart/contracts` (for example `@sagamart/contracts/inventory/v1`, used with Connect's gRPC transport). Java (Order) generates its own at build time from `proto/`.
 
 ## Rules
 
