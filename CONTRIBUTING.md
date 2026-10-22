@@ -9,10 +9,23 @@ The full process is in [docs/engineering/development-process.md](docs/engineerin
 | Docker + Compose v2 | 27+ / 2.29+ | Everything (`make up`) |
 | GNU Make | 4+ | The single entry point |
 | Go | 1.25+ | Inventory, Payment, Event workers, mock provider, invariant checker |
-| Node.js | 22 LTS+ | Gateway, Catalog + Cart, web app |
+| Node.js | 24.11+ (`.node-version`) | Gateway, Catalog + Cart, web app |
+| pnpm | 10.34.7, from `packageManager` in `package.json` | The Node workspace; any pnpm 9.7+ or corepack switches to it automatically |
 | Java | 21+ | Order service |
 
 Protobuf tooling (`buf`) runs in Docker through `make contracts-lint`, so it does not need a local install.
+
+### Node workspace
+
+```bash
+pnpm install          # every Node package and service
+pnpm lint             # ESLint (strict type-checked) and Prettier
+pnpm typecheck && pnpm build && pnpm test
+```
+
+Shared code lives in `packages/node-common` (logger, telemetry, config validation, Problem Details, the internal identity). Services depend on it as `"@sagamart/node-common": "workspace:*"`.
+
+Version notes, so nobody "upgrades" by accident: TypeScript is pinned to 6.0 because typescript-eslint 8 supports TypeScript below 6.1. pnpm is pinned to 10.x because the binaries of pnpm 11 and 12 can't be installed by pnpm 10's version switcher or by corepack 0.34. Revisit both when the tooling catches up.
 
 ```bash
 git clone git@github.com:rizkyr99/sagamart.git

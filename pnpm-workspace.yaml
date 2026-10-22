@@ -1,0 +1,5 @@
+# Node packages only. Go services (inventory, payment, ...) and Java (order) have no package.json and are ignored.
+packages:
+  - packages/*
+  - services/*
+  - apps/*
