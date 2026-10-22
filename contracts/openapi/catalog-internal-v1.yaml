@@ -242,6 +242,7 @@ paths:
         "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
         "404": { $ref: "components/common-v1.yaml#/components/responses/NotFound" }
         "412": { $ref: "components/common-v1.yaml#/components/responses/PreconditionFailed" }
+        "422": { $ref: "components/common-v1.yaml#/components/responses/Unprocessable" }
         "428": { $ref: "components/common-v1.yaml#/components/responses/PreconditionRequired" }
 
   /internal/v1/admin/products:

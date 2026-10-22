@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { ProblemError, problem } from '@sagamart/node-common';
 import { z } from 'zod';
 
 /** The query a cursor belongs to: sort and filters, normalised (absent filters are null). */
@@ -54,4 +55,22 @@ export function decodeCursor(cursor: string, query: CursorQuery, kind: CursorKin
   const position = positions[kind].safeParse(rest);
   if (!position.success) throw new CursorError('MALFORMED');
   return position.data;
+}
+
+/** The 400 a refused cursor gets: CURSOR_MISMATCH, or VALIDATION_FAILED naming the `cursor` field. */
+export function cursorProblem(err: CursorError): ProblemError {
+  return new ProblemError(
+    err.reason === 'MISMATCH'
+      ? problem({
+          status: 400,
+          code: 'CURSOR_MISMATCH',
+          detail: 'This cursor belongs to a query with other filters or another sort.',
+        })
+      : problem({
+          status: 400,
+          code: 'VALIDATION_FAILED',
+          detail: 'The request is invalid.',
+          errors: [{ field: 'cursor', message: 'is not a cursor from this API' }],
+        }),
+  );
 }

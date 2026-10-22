@@ -4,11 +4,10 @@ import { z } from 'zod';
 import { parse } from '../validation.js';
 import { CatalogQueries } from './catalog.queries.js';
 import type { Category, ProductDetail, ProductSummary, SkuLookupItem } from './catalog.queries.js';
-import { CursorError, decodeCursor, encodeCursor } from './cursor.js';
+import { CursorError, cursorProblem, decodeCursor, encodeCursor } from './cursor.js';
 import type { CursorPosition } from './cursor.js';
-import { SLUG, parseListingQuery } from './listing-query.js';
-
-export const skuCode = z.string().min(1).max(64).regex(/^\S+$/, 'must not contain whitespace');
+import { SLUG, skuCode } from './fields.js';
+import { parseListingQuery } from './listing-query.js';
 
 const lookupBody = z.strictObject({
   skus: z
@@ -41,21 +40,8 @@ export class CatalogController {
       try {
         after = decodeCursor(q.cursor, fingerprinted, q.sort === 'newest' ? 'time' : 'price');
       } catch (err) {
-        if (!(err instanceof CursorError)) throw err;
-        throw new ProblemError(
-          err.reason === 'MISMATCH'
-            ? problem({
-                status: 400,
-                code: 'CURSOR_MISMATCH',
-                detail: 'This cursor belongs to a query with other filters or another sort.',
-              })
-            : problem({
-                status: 400,
-                code: 'VALIDATION_FAILED',
-                detail: 'The request is invalid.',
-                errors: [{ field: 'cursor', message: 'is not a cursor from this API' }],
-              }),
-        );
+        if (err instanceof CursorError) throw cursorProblem(err);
+        throw err;
       }
     }
 
