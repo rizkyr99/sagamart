@@ -12,6 +12,7 @@ One file per decision, numbered in order. Accepted ADRs are never edited except 
 | [0006](0006-transactional-outbox.md) | Publish events through a transactional outbox | Accepted | 2026-10-21 |
 | [0007](0007-cart-in-dynamodb.md) | Store carts in DynamoDB | Accepted | 2026-10-21 |
 | [0008](0008-reservation-strategy.md) | Reserve stock with a single conditional UPDATE in Postgres | Accepted | 2026-10-21 |
+| [0009](0009-cart-as-single-item.md) | Store each cart as a single DynamoDB item (refines ADR-0007) | Accepted | 2026-10-22 |
 
 ## Planned ADRs
 
