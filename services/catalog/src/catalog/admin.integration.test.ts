@@ -3,7 +3,7 @@ import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Idempotency } from '../idempotency.js';
-import { Contract } from '../testing/contract.js';
+import { Contract } from '@sagamart/contract-testing';
 import { startHarness } from '../testing/harness.js';
 import type { Harness } from '../testing/harness.js';
 

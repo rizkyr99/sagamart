@@ -10,7 +10,7 @@ interface Operation {
 }
 type PathItem = Partial<Record<string, Operation>>;
 
-/** Checks response bodies against one of contracts/openapi's specs, with every $ref resolved. */
+/** Checks response bodies against one of contracts/openapi's specs (`public-v1.yaml`, ...), with every $ref resolved. */
 export class Contract {
   private readonly validators = new Map<string, ValidateFunction>();
 
@@ -20,7 +20,8 @@ export class Contract {
   ) {}
 
   static async load(spec: string): Promise<Contract> {
-    const ref = fileURLToPath(new URL(`../../../../contracts/openapi/${spec}`, import.meta.url));
+    // From src/ (tests) or dist/ (built), both two levels below the package, three below the repository.
+    const ref = fileURLToPath(new URL(`../../../contracts/openapi/${spec}`, import.meta.url));
     const { bundle: doc, problems } = await bundle({
       ref,
       config: await createConfig({}),

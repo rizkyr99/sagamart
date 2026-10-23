@@ -7,11 +7,14 @@ WORKDIR /src
 # Manifests first, so dependency installs are cached until they change.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/node-common/package.json packages/node-common/
+# Test support is a dev dependency, but pnpm resolves every workspace link when installing and deploying.
+COPY packages/contract-testing/package.json packages/contract-testing/
 COPY contracts/gen/ts/package.json contracts/gen/ts/
 COPY services/gateway/package.json services/gateway/
 RUN pnpm install --frozen-lockfile --filter "@sagamart/gateway..."
 
 COPY packages/node-common packages/node-common
+COPY packages/contract-testing packages/contract-testing
 COPY contracts/gen/ts contracts/gen/ts
 COPY services/gateway services/gateway
 RUN pnpm --filter "@sagamart/gateway..." build \

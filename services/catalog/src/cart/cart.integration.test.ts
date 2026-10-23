@@ -6,7 +6,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule, configureApp } from '../app.module.js';
-import { Contract } from '../testing/contract.js';
+import { Contract } from '@sagamart/contract-testing';
 import { startHarness, userId } from '../testing/harness.js';
 import type { Harness } from '../testing/harness.js';
 

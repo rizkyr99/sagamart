@@ -39,6 +39,18 @@ importers:
         specifier: 2.16.0
         version: 2.16.0
 
+  packages/contract-testing:
+    dependencies:
+      '@redocly/openapi-core':
+        specifier: 2.67.1
+        version: 2.67.1
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
+      ajv-formats:
+        specifier: 3.0.1
+        version: 3.0.1(ajv@8.20.0)
+
   packages/node-common:
     dependencies:
       '@opentelemetry/api':
@@ -130,9 +142,9 @@ importers:
       '@nestjs/testing':
         specifier: 12.2.0
         version: 12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.2.0)(@nestjs/platform-express@12.2.0)
-      '@redocly/openapi-core':
-        specifier: 2.67.1
-        version: 2.67.1
+      '@sagamart/contract-testing':
+        specifier: workspace:*
+        version: link:../../packages/contract-testing
       '@swc/core':
         specifier: 1.16.18
         version: 1.16.18
@@ -148,12 +160,6 @@ importers:
       '@types/supertest':
         specifier: 7.2.1
         version: 7.2.1
-      ajv:
-        specifier: 8.20.0
-        version: 8.20.0
-      ajv-formats:
-        specifier: 3.0.1
-        version: 3.0.1(ajv@8.20.0)
       supertest:
         specifier: 7.3.1
         version: 7.3.1
@@ -221,9 +227,9 @@ importers:
       '@nestjs/testing':
         specifier: 12.2.0
         version: 12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.2.0)(@nestjs/platform-express@12.2.0)
-      '@redocly/openapi-core':
-        specifier: 2.67.1
-        version: 2.67.1
+      '@sagamart/contract-testing':
+        specifier: workspace:*
+        version: link:../../packages/contract-testing
       '@swc/core':
         specifier: 1.16.18
         version: 1.16.18
@@ -236,12 +242,6 @@ importers:
       '@types/supertest':
         specifier: 7.2.1
         version: 7.2.1
-      ajv:
-        specifier: 8.20.0
-        version: 8.20.0
-      ajv-formats:
-        specifier: 3.0.1
-        version: 3.0.1(ajv@8.20.0)
       supertest:
         specifier: 7.3.1
         version: 7.3.1
@@ -251,6 +251,12 @@ importers:
       unplugin-swc:
         specifier: 2.0.0
         version: 2.0.0(@swc/core@1.16.18)(rolldown@1.2.15)(vite@8.3.5(@types/node@24.19.2)(yaml@2.9.1))
+
+  tests/e2e:
+    devDependencies:
+      '@sagamart/contract-testing':
+        specifier: workspace:*
+        version: link:../../packages/contract-testing
 
 packages:
 

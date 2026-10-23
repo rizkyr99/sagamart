@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { Contract } from '../testing/contract.js';
+import { Contract } from '@sagamart/contract-testing';
 import { startHarness } from '../testing/harness.js';
 import type { Harness } from '../testing/harness.js';
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Contract } from './contract.js';
+import { Contract } from './index.js';
 
 describe('Contract', () => {
   it('passes a body that matches the spec and names what is wrong with one that does not', async () => {
