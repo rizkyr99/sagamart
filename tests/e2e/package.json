@@ -1,0 +1,14 @@
+{
+  "name": "@sagamart/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end flows through the public API on the running Compose stack (make demo). Run with make e2e.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "e2e": "vitest run"
+  },
+  "devDependencies": {
+    "@sagamart/contract-testing": "workspace:*"
+  }
+}
