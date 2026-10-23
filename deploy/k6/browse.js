@@ -36,6 +36,7 @@ export const options = {
 };
 
 const json = { 'content-type': 'application/json' };
+const fullCartIsFine = http.expectedStatuses(200, 422);
 const run = Date.now().toString(36);
 
 function must(res, what) {
@@ -85,20 +86,24 @@ export function setup() {
 
 const pick = (items) => items[Math.floor(Math.random() * items.length)];
 let cartToken = null; // per VU: one guest cart each
+let lastList = null; // per VU: the query and nextCursor of its previous list page
 
+// One request per iteration, so the 50/35/15 mix holds for requests: a fifth of list requests follow the cursor
+// from this buyer's previous list page instead of starting a new list.
 function list(data) {
+  if (lastList?.cursor && Math.random() < 0.2) {
+    const page2 = http.get(`${GATEWAY}/v1/products${lastList.query}&cursor=${encodeURIComponent(lastList.cursor)}`, {
+      tags: { name: 'list' },
+    });
+    check(page2, { 'list page 2 200': (r) => r.status === 200 });
+    lastList = null;
+    return;
+  }
   const sort = pick(['newest', 'price_asc', 'price_desc']);
   const query = Math.random() < 0.5 ? `?sort=${sort}` : `?sort=${sort}&category=${data.category}`;
   const res = http.get(`${GATEWAY}/v1/products${query}`, { tags: { name: 'list' } });
   check(res, { 'list 200': (r) => r.status === 200 });
-  // Some buyers look at the next page.
-  if (res.status === 200 && Math.random() < 0.2) {
-    const next = res.json('nextCursor');
-    if (next) {
-      const page2 = http.get(`${GATEWAY}/v1/products${query}&cursor=${encodeURIComponent(next)}`, { tags: { name: 'list' } });
-      check(page2, { 'list page 2 200': (r) => r.status === 200 });
-    }
-  }
+  lastList = { query, cursor: res.status === 200 ? res.json('nextCursor') : null };
 }
 
 function detail(data) {
@@ -111,11 +116,15 @@ function cart(data) {
     cartToken = http.post(`${GATEWAY}/v1/cart/guest-token`, null, { tags: { name: 'cart' } }).json('token');
   }
   const headers = { ...json, 'x-cart-token': cartToken };
+  // A full cart (50 lines) is a legitimate 422, not a failure of the system: expected for http_req_failed too.
   const res =
     Math.random() < 0.5
-      ? http.put(`${GATEWAY}/v1/cart/lines/${pick(data.skus)}`, JSON.stringify({ quantity: 1 + Math.floor(Math.random() * 3) }), { headers, tags: { name: 'cart' } })
+      ? http.put(`${GATEWAY}/v1/cart/lines/${pick(data.skus)}`, JSON.stringify({ quantity: 1 + Math.floor(Math.random() * 3) }), {
+          headers,
+          tags: { name: 'cart' },
+          responseCallback: fullCartIsFine,
+        })
       : http.get(`${GATEWAY}/v1/cart`, { headers, tags: { name: 'cart' } });
-  // A full cart (50 lines) is a legitimate 422, not a failure of the system.
   check(res, { 'cart ok': (r) => r.status === 200 || r.status === 422 });
 }
 

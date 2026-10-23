@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --coverage",
+    "test": "pnpm --filter \"@sagamart/gateway^...\" build && vitest run --coverage",
     "start": "node --import ./dist/instrument.js dist/main.js"
   },
   "dependencies": {
