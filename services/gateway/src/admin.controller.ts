@@ -21,7 +21,7 @@ import { DEADLINES } from './deadline.js';
 import type { InternalRequest } from './internal-client.js';
 import { InventoryClient } from './inventory-client.js';
 import { callerOf, deadlineOf } from './request-context.js';
-import { classifyStockError, conflictProblem } from './stock-admin.js';
+import { classifyStockError, conflictProblem, unreadableConflict } from './stock-admin.js';
 import { parse } from './validation.js';
 
 const setStock = z.strictObject({
@@ -187,11 +187,12 @@ export class AdminController {
         throw new ProblemError(failure.problem);
       }
       // Read the level the admin lost to, so they can retry with the right version and quantity.
-      let level = null;
+      let level;
       try {
         level = await this.inventory.level(valid, caller, deadline);
       } catch (readErr) {
         this.log.warn({ err: readErr, sku: valid }, 'could not read the current level for a stock conflict');
+        throw new ProblemError(unreadableConflict(failure.code, valid));
       }
       throw new ProblemError(conflictProblem(failure.code, valid, level));
     }

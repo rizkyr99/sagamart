@@ -62,16 +62,29 @@ export function classifyStockError(err: unknown): StockFailure {
   }
 }
 
-/** A 409 with what the admin needs to retry correctly: the current version, on-hand and reserved units. */
+/**
+ * A 409 with what the admin needs to retry correctly: the current version, on-hand and reserved units. `level` is
+ * null only when Inventory has no record of the SKU, which version 0 and zero units state truly. A level that
+ * couldn't be read is not a 409 at all (see unreadableConflict).
+ */
 export function conflictProblem(code: StockConflictCode, sku: string, level: CurrentLevel | null): Problem {
   const current = level ?? { version: 0, onHand: 0, reserved: 0 };
   return problem({
     status: 409,
     code,
     detail:
-      code === 'VERSION_CONFLICT'
-        ? `${sku}'s stock changed since you read it.`
-        : `${sku} has ${String(current.reserved)} units reserved; on hand can't go below that.`,
+      code === 'STOCK_BELOW_RESERVED' && level !== null
+        ? `${sku} has ${String(level.reserved)} units reserved; on hand can't go below that.`
+        : `${sku}'s stock changed since you read it.`,
     extensions: { currentVersion: current.version, onHand: current.onHand, reserved: current.reserved },
+  });
+}
+
+/** The change was refused, but the level to retry from couldn't be read: say so, rather than report made-up numbers. */
+export function unreadableConflict(code: StockConflictCode, sku: string): Problem {
+  return problem({
+    status: 503,
+    code: 'DEPENDENCY_UNAVAILABLE',
+    detail: `Inventory refused the change to ${sku} (${code}) and its current level couldn't be read. Retry shortly.`,
   });
 }

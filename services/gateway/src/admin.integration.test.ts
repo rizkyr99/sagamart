@@ -148,9 +148,11 @@ interface InventoryState {
   /** What SetStockLevel does next: succeed, or fail like Inventory does. */
   next: 'ok' | 'VERSION_CONFLICT' | 'STOCK_BELOW_RESERVED' | 'INVALID' | 'DOWN';
   level: { version: bigint; onHand: bigint; reserved: bigint } | null;
+  /** GetStockLevels fails, as when Inventory goes away mid-request. */
+  levelsDown: boolean;
   calls: { method: string; roles: string[]; timeoutMs: number | undefined }[];
 }
-const inventory: InventoryState = { next: 'ok', level: null, calls: [] };
+const inventory: InventoryState = { next: 'ok', level: null, levelsDown: false, calls: [] };
 
 function withDetails(err: ConnectError, details: { type: string; value: Uint8Array }[]): ConnectError {
   err.details.push(...details);
@@ -194,6 +196,7 @@ function inventoryRoutes(
     getStockLevels(req, ctx) {
       const claims = verify(ctx.requestHeader.get('x-sagamart-identity'), 'inventory');
       inventory.calls.push({ method: 'GetStockLevels', roles: claims.roles, timeoutMs: ctx.timeoutMs() });
+      if (inventory.levelsDown) throw new ConnectError('unavailable', Code.Unavailable);
       const level = inventory.level;
       return {
         levels:
@@ -255,7 +258,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   catalogCalls.length = 0;
-  Object.assign(inventory, { next: 'ok', level: null, calls: [] });
+  Object.assign(inventory, { next: 'ok', level: null, levelsDown: false, calls: [] });
 });
 
 const conforms = (method: string, template: string, res: { status: number; body: unknown }) => {
@@ -373,6 +376,15 @@ describe('PUT /v1/admin/skus/{sku}/stock', () => {
       expect(res.body).toMatchObject({ code: reason, currentVersion: 7, onHand: 10, reserved: 4 });
     },
   );
+
+  it('is 503, not a 409 with made-up numbers, when the current level cannot be read', async () => {
+    inventory.next = 'STOCK_BELOW_RESERVED';
+    inventory.levelsDown = true;
+    const res = await put({ onHand: 2, expectedVersion: 6 });
+    expect(res.status).toBe(503);
+    conforms('PUT', '/v1/admin/skus/{sku}/stock', res);
+    expect(res.body).toMatchObject({ code: 'DEPENDENCY_UNAVAILABLE' });
+  });
 
   it('reports version 0 for a SKU Inventory has no record of', async () => {
     inventory.next = 'VERSION_CONFLICT';

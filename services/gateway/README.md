@@ -68,7 +68,7 @@ curl -s -X POST localhost:8100/v1/dev/token -H 'content-type: application/json' 
 
 `PUT /v1/admin/skus/{sku}/stock` takes `{onHand, expectedVersion}`, where `expectedVersion` 0 creates the stock record. The gateway checks the admin role, validates the input (`400` without calling Inventory), then calls `SetStockLevel` with the caller's identity. Inventory checks the role again (#17).
 
-- **Conflicts:** Inventory's `ErrorInfo` reason, decoded in `rpc-errors.ts`, tells its two precondition failures apart. `VERSION_CONFLICT` (another change came first) and `STOCK_BELOW_RESERVED` (on hand below what reservations hold) both become `409`. The gateway then reads the level and adds `currentVersion`, `onHand` and `reserved`, so the admin can retry with the right version and quantity.
+- **Conflicts:** Inventory's `ErrorInfo` reason, decoded in `rpc-errors.ts`, tells its two precondition failures apart. `VERSION_CONFLICT` (another change came first) and `STOCK_BELOW_RESERVED` (on hand below what reservations hold) both become `409`. The gateway then reads the level and adds `currentVersion`, `onHand` and `reserved`, so the admin can retry with the right version and quantity. A SKU Inventory has no record of shows version 0. If the level can't be read, the answer is `503` rather than a `409` with numbers it doesn't know.
 - **Other failures:** Inventory's own validation is `400` with its fields in camelCase. Unavailable or late is `503`. Inventory refusing the gateway's identity means the keys don't match, so it is `500` and logged, never blamed on the caller.
 
 Errors are RFC 9457 Problem Details with a stable `code` and the request's `traceId`.

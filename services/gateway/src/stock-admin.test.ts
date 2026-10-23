@@ -2,7 +2,7 @@ import { BinaryWriter } from '@bufbuild/protobuf/wire';
 import { Code, ConnectError } from '@connectrpc/connect';
 type IncomingDetail = Extract<ConnectError['details'][number], { type: string }>;
 import { describe, expect, it } from 'vitest';
-import { classifyStockError, conflictProblem } from './stock-admin.js';
+import { classifyStockError, conflictProblem, unreadableConflict } from './stock-admin.js';
 
 const info = (reason: string) => ({
   type: 'google.rpc.ErrorInfo',
@@ -83,6 +83,16 @@ describe('conflictProblem', () => {
       onHand: 10,
       reserved: 4,
     });
+  });
+
+  it('never claims a reserved quantity it does not know', () => {
+    expect(conflictProblem('STOCK_BELOW_RESERVED', 'NEW', null).detail).not.toMatch(/units reserved/);
+  });
+
+  it('is a 503, not a 409 with made-up numbers, when the current level could not be read', () => {
+    const p = unreadableConflict('VERSION_CONFLICT', 'KAOS-M');
+    expect(p).toMatchObject({ status: 503, code: 'DEPENDENCY_UNAVAILABLE' });
+    expect(p).not.toHaveProperty('currentVersion');
   });
 
   it('reports version 0 and no stock for a SKU with no stock record yet', () => {
