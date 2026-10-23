@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Added
 
+- Admin (#32, FR-11): product, SKU and category routes forwarded to Catalog with `Idempotency-Key` and `If-Match` (status and `ETag` relayed), and `PUT /v1/admin/skus/{sku}/stock` through Inventory's `SetStockLevel`. Conflicts become `409` with the current version, on-hand and reserved units, read from Inventory's `ErrorInfo` reason.
 - Browsing and carts (#31, RFC-0005 §4.4):
   - `GET /v1/categories`, `/v1/products` and `/v1/products/{slug}` with Inventory stock, batched by 100 under a 150 ms deadline, a failed batch marking only its SKUs `UNKNOWN`;
   - `POST /v1/cart/guest-token` and `GET`, `PUT` and `DELETE` on `/v1/cart` with `available` and `exceedsAvailable`;

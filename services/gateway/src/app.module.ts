@@ -16,6 +16,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AuthMiddleware, RateLimitMiddleware, RolesGuard } from './auth.js';
 import type { GatewayConfig } from './config.js';
 import { DEADLINES } from './deadline.js';
+import { AdminController } from './admin.controller.js';
 import { BrowseController } from './browse.controller.js';
 import { CartController } from './cart.controller.js';
 import { CatalogClient } from './catalog-client.js';
@@ -123,6 +124,7 @@ export class AppModule implements NestModule {
         HealthController,
         BrowseController,
         CartController,
+        AdminController,
         ...(config.devAuth.enabled ? [DevController] : []),
       ],
       providers: [

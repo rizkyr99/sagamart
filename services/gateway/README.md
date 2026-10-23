@@ -2,7 +2,7 @@
 
 NestJS 12 service: the only public entry point. It authenticates callers, rate-limits them, and calls internal services with a signed identity. From #31 it also composes responses (Catalog data plus Inventory stock), so the browser makes one call per screen. It owns no business data. Design: [RFC-0005](../../docs/rfc/0005-catalog-cart-gateway.md). Contract: [`public-v1.yaml`](../../contracts/openapi/public-v1.yaml).
 
-> **Status:** browsing, product pages and carts work. Admin routes come in #32.
+> **Status:** complete for Stage 1: browsing, product pages, carts, and admin for products, categories and stock.
 
 ## Run it
 
@@ -28,6 +28,8 @@ curl -s -X POST localhost:8100/v1/dev/token -H 'content-type: application/json' 
 | `GET /v1/products/{slug}` | A product with each SKU's `available` units and `stockStatus` |
 | `POST /v1/cart/guest-token` | A guest cart token; **writes nothing** |
 | `GET /v1/cart`, `PUT` and `DELETE /v1/cart/lines/{sku}` | The caller's cart: a signed-in buyer's own, or the guest cart named by `X-Cart-Token`. Lines get `available`, `exceedsAvailable` and `stockStatus`. |
+| `/v1/admin/categories`, `/v1/admin/products`, `/v1/admin/products/{id}`, `/v1/admin/products/{id}/skus`, `/v1/admin/skus/{sku}` | **Admin.** Forwarded to Catalog's admin API with `Idempotency-Key` (creates) and `If-Match` (edits), which Catalog enforces. Its status, `ETag` and body are relayed. |
+| `PUT /v1/admin/skus/{sku}/stock` | **Admin.** Sets on-hand stock through Inventory's `SetStockLevel` (2 s deadline). See below. |
 | `POST /v1/dev/token` | A development JWT for `buyer` or `admin` (one hour). **Exists only with `GATEWAY_DEV_AUTH=true`**, and the gateway refuses to start with that in `prod`. |
 | `GET /healthz`, `GET /readyz` | Liveness and readiness. Readiness checks nothing downstream: the gateway degrades per dependency instead (RFC-0005 §4.5). |
 | `GET /metrics` | Prometheus metrics |
@@ -61,6 +63,13 @@ curl -s -X POST localhost:8100/v1/dev/token -H 'content-type: application/json' 
   - While open, calls fail at once with `503` and a `Retry-After` of the seconds left.
   - After 10 s one trial call goes through: success closes the breaker, failure re-opens it.
 - **Inventory is called over gRPC** with Connect and the generated `@sagamart/contracts`. The capped deadline becomes the gRPC deadline.
+
+## Admin stock (FR-11)
+
+`PUT /v1/admin/skus/{sku}/stock` takes `{onHand, expectedVersion}`, where `expectedVersion` 0 creates the stock record. The gateway checks the admin role, validates the input (`400` without calling Inventory), then calls `SetStockLevel` with the caller's identity. Inventory checks the role again (#17).
+
+- **Conflicts:** Inventory's `ErrorInfo` reason, decoded in `rpc-errors.ts`, tells its two precondition failures apart. `VERSION_CONFLICT` (another change came first) and `STOCK_BELOW_RESERVED` (on hand below what reservations hold) both become `409`. The gateway then reads the level and adds `currentVersion`, `onHand` and `reserved`, so the admin can retry with the right version and quantity.
+- **Other failures:** Inventory's own validation is `400` with its fields in camelCase. Unavailable or late is `503`. Inventory refusing the gateway's identity means the keys don't match, so it is `500` and logged, never blamed on the caller.
 
 Errors are RFC 9457 Problem Details with a stable `code` and the request's `traceId`.
 
@@ -97,7 +106,8 @@ Errors are RFC 9457 Problem Details with a stable `code` and the request's `trac
 | `src/rate-limit.ts` | The token-bucket script and fail-open limiter |
 | `src/deadline.ts` | Deadlines and the RFC's per-call budgets |
 | `src/internal-client.ts` | Calls to internal services with identity and deadlines |
-| `src/browse.controller.ts`, `src/cart.controller.ts` | The public browse and cart routes |
+| `src/browse.controller.ts`, `src/cart.controller.ts`, `src/admin.controller.ts` | The public browse, cart and admin routes |
+| `src/stock-admin.ts`, `src/rpc-errors.ts` | Stock-change failures as Problem Details, and gRPC error details (pure, unit-tested) |
 | `src/stock.ts` | Stock status rules and batching (pure, unit-tested) |
 | `src/catalog-client.ts`, `src/circuit-breaker.ts` | Catalog behind a circuit breaker (the breaker is pure, unit-tested) |
 | `src/inventory-client.ts` | Inventory over gRPC |
@@ -120,4 +130,5 @@ pnpm --filter @sagamart/gateway test   # needs Docker: Testcontainers Redis
   - Catalog errors relayed without internal paths, product pages, and 404;
   - guest tokens, guest and user cart keys, `exceedsAvailable`, and 401/400 for carts;
   - the breaker opening after five failures and then sparing Catalog, and Catalog unreachable.
+- **Admin integration:** the same kind of stubs, with Inventory returning `ErrorInfo` and `BadRequest` details as Go does. It covers the role checks (no service is called on `401`/`403`), creates with `Idempotency-Key` relaying `201` and `ETag`, `If-Match` and a relayed `412`, listing parameters, setting stock with the admin identity under a 2 s deadline, both conflicts as `409` with the current level (and version 0 for an unknown SKU), input rejected before Inventory, Inventory's own validation, and Inventory down.
 - **Integration:** a real Redis and a stub internal service that verifies the identity exactly as Catalog does. It covers probes, the dev-token route (present or absent), bad and expired tokens, roles, identity contents and forwarded headers, a call missing its deadline, an unreachable service, a burst then `429` then refill, separate buckets per user and IP, and failing open with Redis down and with Redis paused. The paused case then checks that the empty bucket is enforced once Redis answers again.
