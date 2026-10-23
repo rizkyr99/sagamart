@@ -7,10 +7,13 @@ WORKDIR /src
 # Manifests first, so dependency installs are cached until they change.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/node-common/package.json packages/node-common/
+# Test support is a dev dependency, but pnpm resolves every workspace link when installing and deploying.
+COPY packages/contract-testing/package.json packages/contract-testing/
 COPY services/catalog/package.json services/catalog/
 RUN pnpm install --frozen-lockfile --filter "@sagamart/catalog..."
 
 COPY packages/node-common packages/node-common
+COPY packages/contract-testing packages/contract-testing
 COPY services/catalog services/catalog
 RUN pnpm --filter "@sagamart/catalog..." build \
  && pnpm --filter @sagamart/catalog deploy --legacy --prod /out

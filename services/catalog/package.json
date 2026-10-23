@@ -29,14 +29,12 @@
   },
   "devDependencies": {
     "@nestjs/testing": "12.2.0",
-    "@redocly/openapi-core": "2.67.1",
+    "@sagamart/contract-testing": "workspace:*",
     "@swc/core": "1.16.18",
     "@testcontainers/postgresql": "12.2.1",
     "@types/express": "5.0.6",
     "@types/pg": "8.23.1",
     "@types/supertest": "7.2.1",
-    "ajv": "8.20.0",
-    "ajv-formats": "3.0.1",
     "supertest": "7.3.1",
     "testcontainers": "12.2.1",
     "unplugin-swc": "2.0.0"

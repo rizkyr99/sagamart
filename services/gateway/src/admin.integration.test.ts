@@ -19,7 +19,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule, configureApp } from './app.module.js';
 import { loadGatewayConfig } from './config.js';
 import { issueDevToken } from './dev-auth.js';
-import { Contract } from './testing/contract.js';
+import { Contract } from '@sagamart/contract-testing';
 
 const keys = generateKeyPairSync('ed25519');
 const privateKey = keys.privateKey.export({ format: 'der', type: 'pkcs8' }).toString('base64');

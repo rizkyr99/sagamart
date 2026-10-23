@@ -103,6 +103,11 @@ contracts-format: ## Format protobuf contracts in place
 
 ## ---- Quality ----
 
+.PHONY: e2e
+e2e: ## End-to-end flows through the public API on the running stack (make demo first); stops and restarts Inventory
+	pnpm --filter @sagamart/contract-testing build
+	pnpm --filter @sagamart/e2e e2e
+
 .PHONY: test
 test: ## Run unit tests for every service that has a Makefile
 	@set -e; for s in $(SERVICES); do \

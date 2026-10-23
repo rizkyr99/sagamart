@@ -36,3 +36,6 @@ deploy/k6/results/
 
 # raw benchmark output before it is curated into docs/benchmarks
 bench-results/
+
+# Python bytecode (deploy/k6 scripts)
+__pycache__/

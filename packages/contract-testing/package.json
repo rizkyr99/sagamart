@@ -1,0 +1,26 @@
+{
+  "name": "@sagamart/contract-testing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Test support: checks HTTP response bodies against contracts/openapi specs, every $ref resolved. Used by service and end-to-end tests.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@redocly/openapi-core": "2.67.1",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
+  }
+}

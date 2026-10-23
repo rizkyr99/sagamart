@@ -5,6 +5,7 @@
 !services/catalog/**
 !services/gateway/**
 !apps/**
+!tests/**
 !eslint.config.mjs
 !.prettierrc.json
 **/dist/**

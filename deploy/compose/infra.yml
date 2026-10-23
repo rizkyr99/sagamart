@@ -163,6 +163,8 @@ services:
     restart: unless-stopped
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
+      # In-memory storage is unbounded by default: a load test's traces once took 19 GB and starved the machine.
+      MEMORY_MAX_TRACES: "50000"
     ports: ["${JAEGER_UI_PORT}:16686"]
 
   prometheus:

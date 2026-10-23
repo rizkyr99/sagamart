@@ -62,6 +62,9 @@ services:
       GATEWAY_CATALOG_URL: http://catalog:8120
       GATEWAY_INVENTORY_URL: http://inventory:9110
       GATEWAY_REDIS_URL: redis://redis:6379
+      # Per user or IP. Load tests raise them: one k6 host is one IP (deploy/k6/browse.js).
+      GATEWAY_RATE_LIMIT_PER_SECOND: ${GATEWAY_RATE_LIMIT_PER_SECOND:-20}
+      GATEWAY_RATE_LIMIT_BURST: ${GATEWAY_RATE_LIMIT_BURST:-40}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     # The public entry point; still loopback-only on a dev machine.
     ports:

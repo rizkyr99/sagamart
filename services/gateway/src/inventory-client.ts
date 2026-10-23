@@ -44,8 +44,9 @@ export class InventoryClient implements OnApplicationBootstrap {
   /** Opens the connection before the first page needs it. Best effort: never delays startup past 1 s or fails it. */
   async onApplicationBootstrap(): Promise<void> {
     try {
+      // One placeholder SKU: an empty list is invalid, and an unknown SKU is simply left out of the answer.
       await this.client.getStockLevels(
-        { skus: [] },
+        { skus: ['WARM-UP'] },
         {
           headers: { [IDENTITY_HEADER]: this.internal.identityFor({ roles: [] }, 'inventory') },
           timeoutMs: 1000,

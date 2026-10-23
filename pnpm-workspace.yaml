@@ -4,3 +4,4 @@ packages:
   - services/*
   - apps/*
   - contracts/gen/ts
+  - tests/*

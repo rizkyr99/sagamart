@@ -18,7 +18,7 @@ import { loadGatewayConfig } from './config.js';
 import { issueDevToken } from './dev-auth.js';
 import { InternalClient } from './internal-client.js';
 import { callerOf, deadlineOf } from './request-context.js';
-import { Contract } from './testing/contract.js';
+import { Contract } from '@sagamart/contract-testing';
 
 // ---- A stand-in internal service that checks the identity exactly as Catalog does ----
 
