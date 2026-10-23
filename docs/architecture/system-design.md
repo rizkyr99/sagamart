@@ -234,14 +234,14 @@ These are separate on purpose. **Order status** is what the buyer sees; **saga s
 
 | Order status (customer-visible) | Saga states that map to it |
 |---|---|
-| `PENDING` | `STARTED`, `RESERVING_STOCK` |
+| `PENDING` | `RESERVING_STOCK`, `CREATING_PAYMENT` |
 | `AWAITING_PAYMENT` | `AWAITING_PAYMENT` |
 | `PAID` | `COMMITTING_STOCK` |
 | `CONFIRMED` | `COMPLETED` |
 | `CANCELLED` | `CANCELLING`, `REFUNDING`, `CANCELLED` |
 | (unchanged; operator alerted) | `NEEDS_ATTENTION` |
 
-`SHIPPED` and `DELIVERED` are order statuses set by an admin after the saga completes (PRD FR-16); they are not saga states. The full transition table is defined in RFC-0002.
+`SHIPPED` and `DELIVERED` are order statuses set by an admin after the saga completes (PRD FR-16); they are not saga states. The full transition table is in [RFC-0002 §4.4](../rfc/0002-checkout-saga.md#44-the-state-machine).
 
 ## 6. Data management
 
