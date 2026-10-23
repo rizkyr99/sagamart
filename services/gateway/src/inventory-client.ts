@@ -59,6 +59,47 @@ export class InventoryClient implements OnApplicationBootstrap {
     }
   }
 
+  /** Sets a SKU's on-hand stock as the caller, who must be an admin (#17). Throws Inventory's ConnectError. */
+  async setStockLevel(
+    req: { sku: string; onHand: number; expectedVersion: number },
+    caller: Caller,
+    deadline: Deadline,
+  ): Promise<{ sku: string; onHand: number; reserved: number; available: number; version: number }> {
+    const { level } = await this.client.setStockLevel(
+      { sku: req.sku, onHand: BigInt(req.onHand), expectedVersion: BigInt(req.expectedVersion) },
+      this.options(caller, deadline),
+    );
+    if (!level) throw new Error('SetStockLevel answered without a level');
+    return {
+      sku: level.sku,
+      onHand: Number(level.onHand),
+      reserved: Number(level.reserved),
+      available: Number(level.available),
+      version: Number(level.version),
+    };
+  }
+
+  /** One SKU's full level, or null if Inventory has no record of it. Throws on failure. */
+  async level(
+    sku: string,
+    caller: Caller,
+    deadline: Deadline,
+  ): Promise<{ version: number; onHand: number; reserved: number } | null> {
+    const { levels } = await this.client.getStockLevels({ skus: [sku] }, this.options(caller, deadline));
+    const level = levels.find((l) => l.sku === sku);
+    return level
+      ? { version: Number(level.version), onHand: Number(level.onHand), reserved: Number(level.reserved) }
+      : null;
+  }
+
+  private options(caller: Caller, deadline: Deadline) {
+    return {
+      headers: { [IDENTITY_HEADER]: this.internal.identityFor(caller, 'inventory') },
+      timeoutMs: Math.max(1, deadline.remaining()),
+      signal: deadline.signal(),
+    };
+  }
+
   /**
    * Available units per SKU for display; null for UNKNOWN. Never throws: browsing renders without stock
    * (RFC-0005 §4.4). All batches share `deadline`, which callers cap at 150 ms.

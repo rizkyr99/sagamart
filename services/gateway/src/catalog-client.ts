@@ -33,7 +33,7 @@ export class CatalogClient {
   constructor(private readonly internal: InternalClient) {}
 
   /** The response on success; callers narrow `body` to the internal contract's shape. */
-  async call(req: InternalRequest): Promise<{ status: number; body: unknown }> {
+  async call(req: InternalRequest): Promise<{ status: number; body: unknown; headers: Headers }> {
     const permit = this.breaker.allow();
     if (!permit.allowed) {
       breakerOpen.add(1, { service: 'catalog' });
@@ -69,6 +69,6 @@ export class CatalogClient {
       delete relayed.traceId;
       throw new ProblemError(relayed);
     }
-    return { status: response.status, body: response.body };
+    return { status: response.status, body: response.body, headers: response.headers };
   }
 }
