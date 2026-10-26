@@ -1,0 +1,229 @@
+syntax = "proto3";
+
+package sagamart.order.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/rizkyr99/sagamart/contracts/gen/go/sagamart/order/v1;orderv1";
+option java_multiple_files = true;
+option java_package = "dev.sagamart.contracts.order.v1";
+
+// OrderService turns a cart into an order and runs the checkout saga (RFC-0002). Called by the gateway with the
+// caller's x-sagamart-identity (aud "order"): buyers create and read their own orders; admins list and inspect.
+//
+// Domain errors carry a google.rpc.ErrorInfo detail with domain "order.sagamart.dev" and one of these reasons:
+//   CART_EMPTY              FAILED_PRECONDITION  no lines to check out
+//   ITEM_UNAVAILABLE        FAILED_PRECONDITION  a SKU is no longer for sale; metadata "skus" lists them
+//   PRICE_CHANGED           FAILED_PRECONDITION  the current total differs from expected_total, plus a PriceChangedDetail
+//   INSUFFICIENT_STOCK      FAILED_PRECONDITION  Inventory refused; the order is recorded CANCELLED, plus an InsufficientStockDetail
+//   IDEMPOTENCY_KEY_REUSED  ALREADY_EXISTS       the key was used with a different request
+//   ORDER_NOT_FOUND         NOT_FOUND            unknown, or not the caller's (never reveals other buyers' orders)
+// A CreateOrder or GetOrder call whose identity has no sub (a guest) is UNAUTHENTICATED; ListOrders and GetSaga
+// without the admin role are PERMISSION_DENIED.
+// Malformed requests return INVALID_ARGUMENT with a google.rpc.BadRequest detail.
+service OrderService {
+  // CreateOrder checks out the lines (the buyer's cart) at Catalog's current prices and starts the saga.
+  // The buyer is the identity's sub: a token without one (a guest) is UNAUTHENTICATED, whatever the caller checked.
+  // Idempotent on (buyer, idempotency_key), checked before the lines and prices (RFC-0002 §4.2):
+  //   - once an order exists for the key, a repeat returns that order with its current status, even if the cart
+  //     was emptied in between. That includes an order recorded CANCELLED for INSUFFICIENT_STOCK: the repeat
+  //     returns the cancelled order, not the error again;
+  //   - CART_EMPTY, ITEM_UNAVAILABLE and PRICE_CHANGED create no order and don't claim the key, so a repeat is
+  //     evaluated afresh;
+  //   - a concurrent duplicate waits for the first and returns its order.
+  // The first saga steps run inline under a 2.5 s budget, so the reply usually already has payment_url.
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+
+  // GetOrder returns an order to its buyer or an admin; anyone else gets ORDER_NOT_FOUND.
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+
+  // ListOrders lists orders newest first (admin only, PERMISSION_DENIED otherwise), optionally by status.
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+
+  // GetSaga returns an order's saga state and every step (admin only, PRD FR-12).
+  rpc GetSaga(GetSagaRequest) returns (GetSagaResponse);
+}
+
+message Money {
+  // Whole rupiah; never fractional (conventions §3).
+  int64 amount = 1;
+  // ISO 4217; always "IDR" for now.
+  string currency = 2;
+}
+
+message CheckoutLine {
+  string sku = 1;
+  // 1-100, as in the cart.
+  int32 quantity = 2;
+}
+
+// Personal data (RFC-0002 §8): kept in Order only, never in logs, traces, events or saga steps.
+message ShippingAddress {
+  string name = 1;
+  string phone = 2;
+  string address_line = 3;
+  string city = 4;
+  string province = 5;
+  string postal_code = 6;
+}
+
+message CreateOrderRequest {
+  // 1-50 lines with unique SKUs. May be empty: Order decides CART_EMPTY after the idempotency check.
+  repeated CheckoutLine lines = 1;
+  // The total the buyer saw; a different current total is PRICE_CHANGED.
+  Money expected_total = 2;
+  ShippingAddress shipping_address = 3;
+  // "MOCK_CARD" for now.
+  string payment_method = 4;
+  // From the public Idempotency-Key header: 8-128 of A-Z a-z 0-9 . _ : -
+  string idempotency_key = 5;
+}
+
+message CreateOrderResponse {
+  Order order = 1;
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message GetOrderResponse {
+  Order order = 1;
+}
+
+message ListOrdersRequest {
+  // Unset for every status.
+  OrderStatus status = 1;
+  // 1-50; 20 when unset.
+  int32 limit = 2;
+  // Opaque next_cursor from the previous page.
+  string cursor = 3;
+}
+
+message ListOrdersResponse {
+  repeated Order orders = 1;
+  // Empty on the last page.
+  string next_cursor = 2;
+}
+
+message GetSagaRequest {
+  string order_id = 1;
+}
+
+message GetSagaResponse {
+  string order_id = 1;
+  SagaState state = 2;
+  // When an awaiting-payment saga gives up on the payment (RFC-0002 §4.4); unset otherwise.
+  google.protobuf.Timestamp payment_deadline = 3;
+  // Every event, command and transition, oldest first.
+  repeated SagaStep steps = 4;
+}
+
+message Order {
+  string order_id = 1;
+  // The buyer's user ID (the identity's sub).
+  string buyer_id = 2;
+  OrderStatus status = 3;
+  // Set when status is CANCELLED.
+  CancelReason cancel_reason = 4;
+  repeated OrderLine lines = 5;
+  Money total = 6;
+  ShippingAddress shipping_address = 7;
+  // Where the buyer pays; set while status is AWAITING_PAYMENT.
+  string payment_url = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message OrderLine {
+  string sku = 1;
+  // Product and variant name at order time.
+  string name = 2;
+  // Locked at checkout.
+  Money unit_price = 3;
+  int32 quantity = 4;
+}
+
+// Customer-visible status (context map). SHIPPED and DELIVERED come with FR-16.
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_PENDING = 1;
+  ORDER_STATUS_AWAITING_PAYMENT = 2;
+  ORDER_STATUS_PAID = 3;
+  ORDER_STATUS_CONFIRMED = 4;
+  ORDER_STATUS_CANCELLED = 5;
+}
+
+enum CancelReason {
+  CANCEL_REASON_UNSPECIFIED = 0;
+  CANCEL_REASON_INSUFFICIENT_STOCK = 1;
+  CANCEL_REASON_PAYMENT_FAILED = 2;
+  CANCEL_REASON_PAYMENT_TIMEOUT = 3;
+  // Paid, but the reservation could no longer be committed; the payment is refunded.
+  CANCEL_REASON_STOCK_UNAVAILABLE = 4;
+  // Payment couldn't be started after the retry budget.
+  CANCEL_REASON_PAYMENT_UNAVAILABLE = 5;
+}
+
+// The orchestrator's internal progress (RFC-0002 §4.4); not shown to buyers.
+enum SagaState {
+  SAGA_STATE_UNSPECIFIED = 0;
+  SAGA_STATE_RESERVING_STOCK = 1;
+  SAGA_STATE_CREATING_PAYMENT = 2;
+  SAGA_STATE_AWAITING_PAYMENT = 3;
+  SAGA_STATE_COMMITTING_STOCK = 4;
+  SAGA_STATE_COMPLETED = 5;
+  SAGA_STATE_CANCELLING = 6;
+  SAGA_STATE_REFUNDING = 7;
+  SAGA_STATE_CANCELLED = 8;
+  // A compensation exhausted its retry budget; an operator must look.
+  SAGA_STATE_NEEDS_ATTENTION = 9;
+}
+
+message SagaStep {
+  int32 seq = 1;
+  SagaStepKind kind = 2;
+  // A command (ReserveStock, RefundPayment, ...) or an event (payment.succeeded, PaymentDeadlinePassed, ...).
+  string name = 3;
+  SagaState from_state = 4;
+  SagaState to_state = 5;
+  // For commands: 1 for the first try.
+  int32 attempt = 6;
+  SagaStepOutcome outcome = 7;
+  // Error code and message for a failed or retried command; never personal data.
+  string detail = 8;
+  google.protobuf.Timestamp at = 9;
+}
+
+enum SagaStepKind {
+  SAGA_STEP_KIND_UNSPECIFIED = 0;
+  SAGA_STEP_KIND_EVENT = 1;
+  SAGA_STEP_KIND_COMMAND = 2;
+  SAGA_STEP_KIND_TRANSITION = 3;
+}
+
+enum SagaStepOutcome {
+  SAGA_STEP_OUTCOME_UNSPECIFIED = 0;
+  SAGA_STEP_OUTCOME_OK = 1;
+  // Failed transiently; the runner will try again.
+  SAGA_STEP_OUTCOME_RETRYABLE_ERROR = 2;
+  SAGA_STEP_OUTCOME_FAILED = 3;
+}
+
+// Detail for PRICE_CHANGED: what the order would cost now.
+message PriceChangedDetail {
+  Money expected_total = 1;
+  Money current_total = 2;
+}
+
+// Detail for INSUFFICIENT_STOCK, from Inventory's shortfalls.
+message InsufficientStockDetail {
+  string order_id = 1;
+  repeated StockShortfall shortfalls = 2;
+}
+
+message StockShortfall {
+  string sku = 1;
+  int32 requested = 2;
+  int64 available = 3;
+}

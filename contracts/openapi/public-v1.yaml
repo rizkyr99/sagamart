@@ -23,8 +23,10 @@ tags:
     description: Browse categories and products (FR-01, FR-03).
   - name: Cart
     description: Guest and signed-in carts (FR-04).
+  - name: Orders
+    description: Checkout and order status (J3, FR-06–FR-08). Buyers must be signed in.
   - name: Admin
-    description: Product, category and stock management (FR-11). Requires the `admin` role.
+    description: Product, category and stock management (FR-11), and orders with their saga steps (FR-12). Requires the `admin` role.
   - name: Development
     description: Only present when the gateway runs with `GATEWAY_DEV_AUTH=true`, never in `prod`.
 
@@ -475,6 +477,133 @@ paths:
                 reserved: 4
         "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
 
+  /v1/checkout:
+    post:
+      tags: [Orders]
+      operationId: checkout
+      summary: Check out the signed-in buyer's cart
+      description: |
+        Turns the buyer's cart into an order at Catalog's current prices, reserves the stock and starts the payment
+        ([RFC-0002](https://github.com/rizkyr99/sagamart/blob/main/docs/rfc/0002-checkout-saga.md)). No guest checkout:
+        buyers sign in first.
+
+        - **Signed-in buyers only.** A guest (no user) is `401`.
+        - **`Idempotency-Key` required.** Retries with the same key and body:
+          - once an order exists for the key, the retry gets `202` with **that order as it is now**, even after the
+            cart was cleared. That includes an order recorded `CANCELLED` for `INSUFFICIENT_STOCK`: the retry
+            returns the cancelled order, not the `409` again;
+          - `CART_EMPTY`, `ITEM_UNAVAILABLE` and `PRICE_CHANGED` create no order, so a retry is evaluated afresh;
+          - a retry that arrives while the first is still running waits for it and gets the same order. If that
+            takes longer than the gateway can wait, the answer is `503`, and retrying later returns the order.
+          - The same key with another body is `422 IDEMPOTENCY_KEY_REUSED`.
+        - **`expectedTotal`** is the total the buyer saw. If prices changed, the answer is `409 PRICE_CHANGED` with the
+          current total, and nothing is ordered.
+        - The cart's lines are cleared after a `202`.
+        - The reply usually carries `paymentUrl`. If the first steps take longer than the gateway can wait, `status` is
+          `PENDING` without one: poll `GET /v1/orders/{orderId}` until it appears.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: "components/common-v1.yaml#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CheckoutRequest" }
+            examples:
+              checkout: { $ref: "#/components/examples/CheckoutRequest" }
+      responses:
+        "202":
+          description: Accepted; the saga is running. Pay at `paymentUrl`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+              examples:
+                awaitingPayment: { $ref: "#/components/examples/OrderAwaitingPayment" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "409":
+          description: '`PRICE_CHANGED` (carries `currentTotal`) or `INSUFFICIENT_STOCK` (carries `shortfalls`; the order is recorded `CANCELLED`).'
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/CheckoutConflict" }
+              example:
+                type: https://sagamart.dev/errors/price-changed
+                title: Conflict
+                status: 409
+                code: PRICE_CHANGED
+                detail: The total is now 168,000 IDR.
+                expectedTotal: { amount: 158000, currency: IDR }
+                currentTotal: { amount: 168000, currency: IDR }
+        "422": { $ref: "components/common-v1.yaml#/components/responses/Unprocessable" }
+        "429": { $ref: "components/common-v1.yaml#/components/responses/TooManyRequests" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/orders/{orderId}:
+    get:
+      tags: [Orders]
+      operationId: getOrder
+      summary: Get an order and its status
+      description: The buyer's own orders, or any order for an admin; anyone else gets `404`, so order IDs can't be probed.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: The order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+              examples:
+                awaitingPayment: { $ref: "#/components/examples/OrderAwaitingPayment" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "404": { $ref: "components/common-v1.yaml#/components/responses/NotFound" }
+        "429": { $ref: "components/common-v1.yaml#/components/responses/TooManyRequests" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/admin/orders:
+    get:
+      tags: [Admin]
+      operationId: listOrders
+      summary: List orders, newest first
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/OrderStatus" } }
+        - { $ref: "components/common-v1.yaml#/components/parameters/Limit" }
+        - { $ref: "components/common-v1.yaml#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of orders.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderPage" }
+        "400": { $ref: "components/common-v1.yaml#/components/responses/BadRequest" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "429": { $ref: "components/common-v1.yaml#/components/responses/TooManyRequests" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
+  /v1/admin/orders/{orderId}/saga:
+    get:
+      tags: [Admin]
+      operationId: getOrderSaga
+      summary: An order's saga state and every step (FR-12)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: The saga, with its steps oldest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Saga" }
+              examples:
+                confirmed: { $ref: "#/components/examples/SagaConfirmed" }
+        "401": { $ref: "components/common-v1.yaml#/components/responses/Unauthorized" }
+        "403": { $ref: "components/common-v1.yaml#/components/responses/Forbidden" }
+        "404": { $ref: "components/common-v1.yaml#/components/responses/NotFound" }
+        "429": { $ref: "components/common-v1.yaml#/components/responses/TooManyRequests" }
+        "503": { $ref: "components/common-v1.yaml#/components/responses/Unavailable" }
+
   /v1/dev/token:
     post:
       tags: [Development]
@@ -640,6 +769,124 @@ components:
         token: { type: string }
         expiresAt: { type: string, format: date-time }
 
+    ShippingAddress:
+      description: Personal data, kept in the Order service only (RFC-0002 §8).
+      type: object
+      required: [name, phone, addressLine, city, province, postalCode]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        phone: { type: string, pattern: "^\\+?[0-9][0-9 -]{5,19}$", example: "+62 812 3456 7890" }
+        addressLine: { type: string, minLength: 1, maxLength: 300 }
+        city: { type: string, minLength: 1, maxLength: 100 }
+        province: { type: string, minLength: 1, maxLength: 100 }
+        postalCode: { type: string, pattern: "^[0-9]{5}$", example: "12190" }
+      additionalProperties: false
+
+    CheckoutRequest:
+      type: object
+      required: [expectedTotal, shippingAddress, paymentMethod]
+      properties:
+        expectedTotal: { $ref: "components/common-v1.yaml#/components/schemas/PositiveMoney" }
+        shippingAddress: { $ref: "#/components/schemas/ShippingAddress" }
+        paymentMethod: { type: string, enum: [MOCK_CARD] }
+      additionalProperties: false
+
+    OrderStatus:
+      type: string
+      enum: [PENDING, AWAITING_PAYMENT, PAID, CONFIRMED, CANCELLED]
+
+    CancelReason:
+      type: string
+      enum: [INSUFFICIENT_STOCK, PAYMENT_FAILED, PAYMENT_TIMEOUT, STOCK_UNAVAILABLE, PAYMENT_UNAVAILABLE]
+
+    OrderLine:
+      type: object
+      required: [sku, name, unitPrice, quantity]
+      properties:
+        sku: { $ref: "components/common-v1.yaml#/components/schemas/Sku" }
+        name: { type: string, description: "Product and variant name at order time." }
+        unitPrice: { $ref: "components/common-v1.yaml#/components/schemas/PositiveMoney" }
+        quantity: { type: integer, minimum: 1, maximum: 100 }
+
+    Order:
+      type: object
+      required: [orderId, buyerId, status, cancelReason, lines, total, shippingAddress, paymentUrl, createdAt, updatedAt]
+      properties:
+        orderId: { type: string, format: uuid }
+        buyerId: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/OrderStatus" }
+        cancelReason:
+          description: Set when `status` is `CANCELLED`.
+          oneOf:
+            - $ref: "#/components/schemas/CancelReason"
+            - type: "null"
+        lines: { type: array, minItems: 1, maxItems: 50, items: { $ref: "#/components/schemas/OrderLine" } }
+        total: { $ref: "components/common-v1.yaml#/components/schemas/PositiveMoney" }
+        shippingAddress: { $ref: "#/components/schemas/ShippingAddress" }
+        paymentUrl: { type: [string, "null"], format: uri, description: "Where to pay; set while `status` is `AWAITING_PAYMENT`." }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    OrderPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Order" } }
+        nextCursor: { type: [string, "null"] }
+
+    SagaState:
+      description: The orchestrator's internal progress (RFC-0002 §4.4); not shown to buyers.
+      type: string
+      enum: [RESERVING_STOCK, CREATING_PAYMENT, AWAITING_PAYMENT, COMMITTING_STOCK, COMPLETED, CANCELLING, REFUNDING, CANCELLED, NEEDS_ATTENTION]
+
+    SagaStep:
+      type: object
+      required: [seq, kind, name, fromState, toState, attempt, outcome, detail, at]
+      properties:
+        seq: { type: integer, minimum: 1 }
+        kind: { type: string, enum: [EVENT, COMMAND, TRANSITION] }
+        name: { type: string, description: "A command (ReserveStock, ...) or an event (payment.succeeded, PaymentDeadlinePassed, ...).", example: ReserveStock }
+        fromState:
+          oneOf:
+            - $ref: "#/components/schemas/SagaState"
+            - type: "null"
+        toState:
+          oneOf:
+            - $ref: "#/components/schemas/SagaState"
+            - type: "null"
+        attempt: { type: [integer, "null"], minimum: 1, description: "For commands: 1 for the first try." }
+        outcome: { type: [string, "null"], enum: [OK, RETRYABLE_ERROR, FAILED, null] }
+        detail: { type: [string, "null"], description: "Error code and message of a failed or retried command; never personal data." }
+        at: { type: string, format: date-time }
+
+    Saga:
+      type: object
+      required: [orderId, state, paymentDeadline, steps]
+      properties:
+        orderId: { type: string, format: uuid }
+        state: { $ref: "#/components/schemas/SagaState" }
+        paymentDeadline: { type: [string, "null"], format: date-time, description: "When an awaiting-payment saga gives up on the payment." }
+        steps: { type: array, items: { $ref: "#/components/schemas/SagaStep" } }
+
+    CheckoutConflict:
+      allOf:
+        - $ref: "components/common-v1.yaml#/components/schemas/Problem"
+        - type: object
+          properties:
+            code: { type: string, enum: [PRICE_CHANGED, INSUFFICIENT_STOCK] }
+            expectedTotal: { $ref: "components/common-v1.yaml#/components/schemas/PositiveMoney" }
+            currentTotal: { $ref: "components/common-v1.yaml#/components/schemas/PositiveMoney" }
+            orderId: { type: string, format: uuid, description: "INSUFFICIENT_STOCK: the order, recorded as CANCELLED." }
+            shortfalls:
+              type: array
+              items:
+                type: object
+                required: [sku, requested, available]
+                properties:
+                  sku: { $ref: "components/common-v1.yaml#/components/schemas/Sku" }
+                  requested: { type: integer, minimum: 1 }
+                  available: { type: integer, minimum: 0 }
+
   examples:
     Cart:
       value:
@@ -658,3 +905,46 @@ components:
             available: 12
             exceedsAvailable: false
             stockStatus: IN_STOCK
+    CheckoutRequest:
+      value:
+        expectedTotal: { amount: 158000, currency: IDR }
+        shippingAddress:
+          name: Siti Rahma
+          phone: "+62 812 3456 7890"
+          addressLine: Jl. Sudirman No. 1
+          city: Jakarta Selatan
+          province: DKI Jakarta
+          postalCode: "12190"
+        paymentMethod: MOCK_CARD
+    OrderAwaitingPayment:
+      value:
+        orderId: 0199f2b1-7a10-7b2c-9d3e-4f5a6b7c8d01
+        buyerId: 0199f2e0-0000-7000-8000-000000000001
+        status: AWAITING_PAYMENT
+        cancelReason: null
+        lines:
+          - { sku: KAOS-001-M, name: Kaos Polos Hitam M / Hitam, unitPrice: { amount: 79000, currency: IDR }, quantity: 2 }
+        total: { amount: 158000, currency: IDR }
+        shippingAddress:
+          name: Siti Rahma
+          phone: "+62 812 3456 7890"
+          addressLine: Jl. Sudirman No. 1
+          city: Jakarta Selatan
+          province: DKI Jakarta
+          postalCode: "12190"
+        paymentUrl: http://localhost:8130/pay/0199f2b1-7b22-7c31-a4d5-6e7f8091a2b4
+        createdAt: "2026-10-26T03:10:00.000Z"
+        updatedAt: "2026-10-26T03:10:00.640Z"
+    SagaConfirmed:
+      value:
+        orderId: 0199f2b1-7a10-7b2c-9d3e-4f5a6b7c8d01
+        state: COMPLETED
+        paymentDeadline: null
+        steps:
+          - { seq: 1, kind: COMMAND, name: ReserveStock, fromState: RESERVING_STOCK, toState: null, attempt: 1, outcome: OK, detail: null, at: "2026-10-26T03:10:00.120Z" }
+          - { seq: 2, kind: TRANSITION, name: StockReserved, fromState: RESERVING_STOCK, toState: CREATING_PAYMENT, attempt: null, outcome: null, detail: null, at: "2026-10-26T03:10:00.121Z" }
+          - { seq: 3, kind: COMMAND, name: CreatePaymentIntent, fromState: CREATING_PAYMENT, toState: null, attempt: 1, outcome: OK, detail: null, at: "2026-10-26T03:10:00.630Z" }
+          - { seq: 4, kind: TRANSITION, name: IntentCreated, fromState: CREATING_PAYMENT, toState: AWAITING_PAYMENT, attempt: null, outcome: null, detail: null, at: "2026-10-26T03:10:00.631Z" }
+          - { seq: 5, kind: EVENT, name: payment.succeeded, fromState: AWAITING_PAYMENT, toState: COMMITTING_STOCK, attempt: null, outcome: null, detail: null, at: "2026-10-26T03:12:40.300Z" }
+          - { seq: 6, kind: COMMAND, name: CommitReservation, fromState: COMMITTING_STOCK, toState: null, attempt: 1, outcome: OK, detail: null, at: "2026-10-26T03:12:40.880Z" }
+          - { seq: 7, kind: TRANSITION, name: StockCommitted, fromState: COMMITTING_STOCK, toState: COMPLETED, attempt: null, outcome: null, detail: null, at: "2026-10-26T03:12:40.881Z" }

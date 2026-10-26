@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sagamart.dev/schemas/events/schemas/payment.succeeded.v1.schema.json",
+  "title": "payment.succeeded/v1",
+  "description": "A capture was recorded for an order's payment intent, from a verified provider webhook or from reconciliation (RFC-0002 \u00a74.5). Exactly one per intent (FR-07). Consumed by the Order saga, which commits the stock.",
+  "allOf": [
+    {
+      "$ref": "../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "payment.succeeded"
+    },
+    "source": {
+      "const": "payment"
+    },
+    "dataschema": {
+      "const": "payment.succeeded/v1"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "orderId",
+        "paymentIntentId",
+        "amount",
+        "capturedAt"
+      ],
+      "properties": {
+        "orderId": {
+          "description": "Also the event subject.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "paymentIntentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "amount": {
+          "type": "object",
+          "required": [
+            "amount",
+            "currency"
+          ],
+          "properties": {
+            "amount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "currency": {
+              "const": "IDR"
+            }
+          },
+          "additionalProperties": false
+        },
+        "capturedAt": {
+          "description": "When the capture was recorded, UTC.",
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

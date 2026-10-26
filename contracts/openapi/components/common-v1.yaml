@@ -187,7 +187,7 @@ components:
           schema: { $ref: "#/components/schemas/Problem" }
           example: { type: "https://sagamart.dev/errors/if-match-required", title: If-Match required, status: 428, code: IF_MATCH_REQUIRED }
     Unprocessable:
-      description: Valid request that business rules reject (`CART_LINE_LIMIT`, `IDEMPOTENCY_KEY_REUSED`, `PRODUCT_NEEDS_ACTIVE_SKU`, `SKU_LIMIT`, `CATEGORY_NOT_FOUND`, `CATEGORY_CYCLE`).
+      description: Valid request that business rules reject (`CART_LINE_LIMIT`, `IDEMPOTENCY_KEY_REUSED`, `PRODUCT_NEEDS_ACTIVE_SKU`, `SKU_LIMIT`, `CATEGORY_NOT_FOUND`, `CATEGORY_CYCLE`, `CART_EMPTY`, `ITEM_UNAVAILABLE`).
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }

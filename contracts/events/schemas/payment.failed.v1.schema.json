@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sagamart.dev/schemas/events/schemas/payment.failed.v1.schema.json",
+  "title": "payment.failed/v1",
+  "description": "An order's payment intent ended without a capture: the provider declined it or it expired (RFC-0002 \u00a74.5). Consumed by the Order saga, which cancels the order.",
+  "allOf": [
+    {
+      "$ref": "../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "payment.failed"
+    },
+    "source": {
+      "const": "payment"
+    },
+    "dataschema": {
+      "const": "payment.failed/v1"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "orderId",
+        "paymentIntentId",
+        "reason",
+        "failedAt"
+      ],
+      "properties": {
+        "orderId": {
+          "description": "Also the event subject.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "paymentIntentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "DECLINED",
+            "EXPIRED"
+          ]
+        },
+        "failedAt": {
+          "description": "When the failure was recorded, UTC.",
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

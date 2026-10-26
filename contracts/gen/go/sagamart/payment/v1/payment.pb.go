@@ -139,9 +139,12 @@ type CreatePaymentIntentRequest struct {
 	OrderId        string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
 	IdempotencyKey string                 `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	Amount         *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
-	PaymentMethod  string                 `protobuf:"bytes,4,opt,name=payment_method,json=paymentMethod,proto3" json:"payment_method,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// "MOCK_CARD" for now.
+	PaymentMethod string `protobuf:"bytes,4,opt,name=payment_method,json=paymentMethod,proto3" json:"payment_method,omitempty"`
+	// When the intent stops accepting payment; Order sets it from the stock reservation (RFC-0002 §4.4).
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreatePaymentIntentRequest) Reset() {
@@ -200,6 +203,13 @@ func (x *CreatePaymentIntentRequest) GetPaymentMethod() string {
 		return x.PaymentMethod
 	}
 	return ""
+}
+
+func (x *CreatePaymentIntentRequest) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
 }
 
 type CreatePaymentIntentResponse struct {
@@ -463,6 +473,136 @@ func (x *RefundPaymentResponse) GetStatus() PaymentStatus {
 	return PaymentStatus_PAYMENT_STATUS_UNSPECIFIED
 }
 
+type GetPaymentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPaymentRequest) Reset() {
+	*x = GetPaymentRequest{}
+	mi := &file_sagamart_payment_v1_payment_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPaymentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPaymentRequest) ProtoMessage() {}
+
+func (x *GetPaymentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sagamart_payment_v1_payment_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPaymentRequest.ProtoReflect.Descriptor instead.
+func (*GetPaymentRequest) Descriptor() ([]byte, []int) {
+	return file_sagamart_payment_v1_payment_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GetPaymentRequest) GetOrderId() string {
+	if x != nil {
+		return x.OrderId
+	}
+	return ""
+}
+
+type GetPaymentResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	PaymentIntentId string                 `protobuf:"bytes,1,opt,name=payment_intent_id,json=paymentIntentId,proto3" json:"payment_intent_id,omitempty"`
+	Status          PaymentStatus          `protobuf:"varint,2,opt,name=status,proto3,enum=sagamart.payment.v1.PaymentStatus" json:"status,omitempty"`
+	Amount          *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	ExpiresAt       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// Set once a capture is recorded.
+	CapturedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=captured_at,json=capturedAt,proto3" json:"captured_at,omitempty"`
+	// Set once a refund is recorded.
+	RefundedAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=refunded_at,json=refundedAt,proto3" json:"refunded_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPaymentResponse) Reset() {
+	*x = GetPaymentResponse{}
+	mi := &file_sagamart_payment_v1_payment_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPaymentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPaymentResponse) ProtoMessage() {}
+
+func (x *GetPaymentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sagamart_payment_v1_payment_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPaymentResponse.ProtoReflect.Descriptor instead.
+func (*GetPaymentResponse) Descriptor() ([]byte, []int) {
+	return file_sagamart_payment_v1_payment_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *GetPaymentResponse) GetPaymentIntentId() string {
+	if x != nil {
+		return x.PaymentIntentId
+	}
+	return ""
+}
+
+func (x *GetPaymentResponse) GetStatus() PaymentStatus {
+	if x != nil {
+		return x.Status
+	}
+	return PaymentStatus_PAYMENT_STATUS_UNSPECIFIED
+}
+
+func (x *GetPaymentResponse) GetAmount() *Money {
+	if x != nil {
+		return x.Amount
+	}
+	return nil
+}
+
+func (x *GetPaymentResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *GetPaymentResponse) GetCapturedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CapturedAt
+	}
+	return nil
+}
+
+func (x *GetPaymentResponse) GetRefundedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RefundedAt
+	}
+	return nil
+}
+
 var File_sagamart_payment_v1_payment_proto protoreflect.FileDescriptor
 
 const file_sagamart_payment_v1_payment_proto_rawDesc = "" +
@@ -470,12 +610,14 @@ const file_sagamart_payment_v1_payment_proto_rawDesc = "" +
 	"!sagamart/payment/v1/payment.proto\x12\x13sagamart.payment.v1\x1a\x1fgoogle/protobuf/timestamp.proto\";\n" +
 	"\x05Money\x12\x16\n" +
 	"\x06amount\x18\x01 \x01(\x03R\x06amount\x12\x1a\n" +
-	"\bcurrency\x18\x02 \x01(\tR\bcurrency\"\xbb\x01\n" +
+	"\bcurrency\x18\x02 \x01(\tR\bcurrency\"\xf6\x01\n" +
 	"\x1aCreatePaymentIntentRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12'\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x122\n" +
 	"\x06amount\x18\x03 \x01(\v2\x1a.sagamart.payment.v1.MoneyR\x06amount\x12%\n" +
-	"\x0epayment_method\x18\x04 \x01(\tR\rpaymentMethod\"\xe3\x01\n" +
+	"\x0epayment_method\x18\x04 \x01(\tR\rpaymentMethod\x129\n" +
+	"\n" +
+	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\xe3\x01\n" +
 	"\x1bCreatePaymentIntentResponse\x12*\n" +
 	"\x11payment_intent_id\x18\x01 \x01(\tR\x0fpaymentIntentId\x12:\n" +
 	"\x06status\x18\x02 \x01(\x0e2\".sagamart.payment.v1.PaymentStatusR\x06status\x12!\n" +
@@ -491,18 +633,32 @@ const file_sagamart_payment_v1_payment_proto_rawDesc = "" +
 	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\"p\n" +
 	"\x15RefundPaymentResponse\x12\x1b\n" +
 	"\trefund_id\x18\x01 \x01(\tR\brefundId\x12:\n" +
-	"\x06status\x18\x02 \x01(\x0e2\".sagamart.payment.v1.PaymentStatusR\x06status*\xc4\x01\n" +
+	"\x06status\x18\x02 \x01(\x0e2\".sagamart.payment.v1.PaymentStatusR\x06status\".\n" +
+	"\x11GetPaymentRequest\x12\x19\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\"\xe5\x02\n" +
+	"\x12GetPaymentResponse\x12*\n" +
+	"\x11payment_intent_id\x18\x01 \x01(\tR\x0fpaymentIntentId\x12:\n" +
+	"\x06status\x18\x02 \x01(\x0e2\".sagamart.payment.v1.PaymentStatusR\x06status\x122\n" +
+	"\x06amount\x18\x03 \x01(\v2\x1a.sagamart.payment.v1.MoneyR\x06amount\x129\n" +
+	"\n" +
+	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12;\n" +
+	"\vcaptured_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"capturedAt\x12;\n" +
+	"\vrefunded_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"refundedAt*\xc4\x01\n" +
 	"\rPaymentStatus\x12\x1e\n" +
 	"\x1aPAYMENT_STATUS_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1ePAYMENT_STATUS_REQUIRES_ACTION\x10\x01\x12\x1c\n" +
 	"\x18PAYMENT_STATUS_SUCCEEDED\x10\x02\x12\x19\n" +
 	"\x15PAYMENT_STATUS_FAILED\x10\x03\x12\x19\n" +
 	"\x15PAYMENT_STATUS_VOIDED\x10\x04\x12\x1b\n" +
-	"\x17PAYMENT_STATUS_REFUNDED\x10\x052\xe6\x02\n" +
+	"\x17PAYMENT_STATUS_REFUNDED\x10\x052\xc5\x03\n" +
 	"\x0ePaymentService\x12x\n" +
 	"\x13CreatePaymentIntent\x12/.sagamart.payment.v1.CreatePaymentIntentRequest\x1a0.sagamart.payment.v1.CreatePaymentIntentResponse\x12r\n" +
 	"\x11VoidPaymentIntent\x12-.sagamart.payment.v1.VoidPaymentIntentRequest\x1a..sagamart.payment.v1.VoidPaymentIntentResponse\x12f\n" +
-	"\rRefundPayment\x12).sagamart.payment.v1.RefundPaymentRequest\x1a*.sagamart.payment.v1.RefundPaymentResponseBr\n" +
+	"\rRefundPayment\x12).sagamart.payment.v1.RefundPaymentRequest\x1a*.sagamart.payment.v1.RefundPaymentResponse\x12]\n" +
+	"\n" +
+	"GetPayment\x12&.sagamart.payment.v1.GetPaymentRequest\x1a'.sagamart.payment.v1.GetPaymentResponseBr\n" +
 	"!dev.sagamart.contracts.payment.v1P\x01ZKgithub.com/rizkyr99/sagamart/contracts/gen/go/sagamart/payment/v1;paymentv1b\x06proto3"
 
 var (
@@ -518,7 +674,7 @@ func file_sagamart_payment_v1_payment_proto_rawDescGZIP() []byte {
 }
 
 var file_sagamart_payment_v1_payment_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_sagamart_payment_v1_payment_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_sagamart_payment_v1_payment_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_sagamart_payment_v1_payment_proto_goTypes = []any{
 	(PaymentStatus)(0),                  // 0: sagamart.payment.v1.PaymentStatus
 	(*Money)(nil),                       // 1: sagamart.payment.v1.Money
@@ -528,25 +684,35 @@ var file_sagamart_payment_v1_payment_proto_goTypes = []any{
 	(*VoidPaymentIntentResponse)(nil),   // 5: sagamart.payment.v1.VoidPaymentIntentResponse
 	(*RefundPaymentRequest)(nil),        // 6: sagamart.payment.v1.RefundPaymentRequest
 	(*RefundPaymentResponse)(nil),       // 7: sagamart.payment.v1.RefundPaymentResponse
-	(*timestamppb.Timestamp)(nil),       // 8: google.protobuf.Timestamp
+	(*GetPaymentRequest)(nil),           // 8: sagamart.payment.v1.GetPaymentRequest
+	(*GetPaymentResponse)(nil),          // 9: sagamart.payment.v1.GetPaymentResponse
+	(*timestamppb.Timestamp)(nil),       // 10: google.protobuf.Timestamp
 }
 var file_sagamart_payment_v1_payment_proto_depIdxs = []int32{
-	1, // 0: sagamart.payment.v1.CreatePaymentIntentRequest.amount:type_name -> sagamart.payment.v1.Money
-	0, // 1: sagamart.payment.v1.CreatePaymentIntentResponse.status:type_name -> sagamart.payment.v1.PaymentStatus
-	8, // 2: sagamart.payment.v1.CreatePaymentIntentResponse.expires_at:type_name -> google.protobuf.Timestamp
-	0, // 3: sagamart.payment.v1.VoidPaymentIntentResponse.status:type_name -> sagamart.payment.v1.PaymentStatus
-	0, // 4: sagamart.payment.v1.RefundPaymentResponse.status:type_name -> sagamart.payment.v1.PaymentStatus
-	2, // 5: sagamart.payment.v1.PaymentService.CreatePaymentIntent:input_type -> sagamart.payment.v1.CreatePaymentIntentRequest
-	4, // 6: sagamart.payment.v1.PaymentService.VoidPaymentIntent:input_type -> sagamart.payment.v1.VoidPaymentIntentRequest
-	6, // 7: sagamart.payment.v1.PaymentService.RefundPayment:input_type -> sagamart.payment.v1.RefundPaymentRequest
-	3, // 8: sagamart.payment.v1.PaymentService.CreatePaymentIntent:output_type -> sagamart.payment.v1.CreatePaymentIntentResponse
-	5, // 9: sagamart.payment.v1.PaymentService.VoidPaymentIntent:output_type -> sagamart.payment.v1.VoidPaymentIntentResponse
-	7, // 10: sagamart.payment.v1.PaymentService.RefundPayment:output_type -> sagamart.payment.v1.RefundPaymentResponse
-	8, // [8:11] is the sub-list for method output_type
-	5, // [5:8] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	1,  // 0: sagamart.payment.v1.CreatePaymentIntentRequest.amount:type_name -> sagamart.payment.v1.Money
+	10, // 1: sagamart.payment.v1.CreatePaymentIntentRequest.expires_at:type_name -> google.protobuf.Timestamp
+	0,  // 2: sagamart.payment.v1.CreatePaymentIntentResponse.status:type_name -> sagamart.payment.v1.PaymentStatus
+	10, // 3: sagamart.payment.v1.CreatePaymentIntentResponse.expires_at:type_name -> google.protobuf.Timestamp
+	0,  // 4: sagamart.payment.v1.VoidPaymentIntentResponse.status:type_name -> sagamart.payment.v1.PaymentStatus
+	0,  // 5: sagamart.payment.v1.RefundPaymentResponse.status:type_name -> sagamart.payment.v1.PaymentStatus
+	0,  // 6: sagamart.payment.v1.GetPaymentResponse.status:type_name -> sagamart.payment.v1.PaymentStatus
+	1,  // 7: sagamart.payment.v1.GetPaymentResponse.amount:type_name -> sagamart.payment.v1.Money
+	10, // 8: sagamart.payment.v1.GetPaymentResponse.expires_at:type_name -> google.protobuf.Timestamp
+	10, // 9: sagamart.payment.v1.GetPaymentResponse.captured_at:type_name -> google.protobuf.Timestamp
+	10, // 10: sagamart.payment.v1.GetPaymentResponse.refunded_at:type_name -> google.protobuf.Timestamp
+	2,  // 11: sagamart.payment.v1.PaymentService.CreatePaymentIntent:input_type -> sagamart.payment.v1.CreatePaymentIntentRequest
+	4,  // 12: sagamart.payment.v1.PaymentService.VoidPaymentIntent:input_type -> sagamart.payment.v1.VoidPaymentIntentRequest
+	6,  // 13: sagamart.payment.v1.PaymentService.RefundPayment:input_type -> sagamart.payment.v1.RefundPaymentRequest
+	8,  // 14: sagamart.payment.v1.PaymentService.GetPayment:input_type -> sagamart.payment.v1.GetPaymentRequest
+	3,  // 15: sagamart.payment.v1.PaymentService.CreatePaymentIntent:output_type -> sagamart.payment.v1.CreatePaymentIntentResponse
+	5,  // 16: sagamart.payment.v1.PaymentService.VoidPaymentIntent:output_type -> sagamart.payment.v1.VoidPaymentIntentResponse
+	7,  // 17: sagamart.payment.v1.PaymentService.RefundPayment:output_type -> sagamart.payment.v1.RefundPaymentResponse
+	9,  // 18: sagamart.payment.v1.PaymentService.GetPayment:output_type -> sagamart.payment.v1.GetPaymentResponse
+	15, // [15:19] is the sub-list for method output_type
+	11, // [11:15] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_sagamart_payment_v1_payment_proto_init() }
@@ -560,7 +726,7 @@ func file_sagamart_payment_v1_payment_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sagamart_payment_v1_payment_proto_rawDesc), len(file_sagamart_payment_v1_payment_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
