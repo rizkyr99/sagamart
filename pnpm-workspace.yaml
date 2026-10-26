@@ -5,3 +5,10 @@ packages:
   - apps/*
   - contracts/gen/ts
   - tests/*
+
+# Security patches ahead of upstream (pnpm audit, 2026-10-26). @nestjs/platform-express 12.2.0 pins multer 2.4.0,
+# and the lockfile held body-parser 2.3.0; both have high-severity DoS advisories fixed in these releases.
+# Remove each override once a NestJS release depends on the patched version.
+overrides:
+  multer: 2.5.0 # GHSA-q7qp-rjg7-q26m
+  body-parser: 2.4.0 # GHSA-27r3-jxmh-p828
