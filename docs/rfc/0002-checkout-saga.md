@@ -109,7 +109,15 @@ All contracts land in `contracts/` before code (step 1 of the rollout).
 | `409` | `PRICE_CHANGED` | The current total differs from `expectedTotal`; carries the new total, so the buyer never pays an amount they didn't see |
 | `409` | `INSUFFICIENT_STOCK` | Carries the shortfalls; the order is recorded `CANCELLED` so it still shows in FR-12 |
 
-**Checkout from the cart.** The gateway reads the buyer's cart from Catalog and sends its lines (SKU and quantity, no prices) to Order. Order re-reads the authoritative prices with Catalog's `skus:lookup` (context map: the cart's price is a snapshot). The gateway clears the cart's lines after a `202`, best effort: a failed clear leaves lines the buyer can remove. A cancelled order doesn't restore them.
+**Checkout from the cart.** The gateway reads the buyer's cart from Catalog and sends its lines (SKU and quantity, no prices) to Order, **even when the cart is empty**. Order decides `CART_EMPTY`, after the idempotency check. Order re-reads the authoritative prices with Catalog's `skus:lookup` (context map: the cart's price is a snapshot). The gateway clears the cart's lines after a `202`, best effort: a failed clear leaves lines the buyer can remove. A cancelled order doesn't restore them.
+
+**Idempotency comes first.** A lost `202` followed by a retry finds the cart already cleared, so `CreateOrder` must recognise the retry before looking at lines or prices:
+
+1. It looks up `(buyer, Idempotency-Key)`. A stored response is replayed: the original `orderId` and its current status.
+2. Otherwise it validates the lines (`CART_EMPTY`), re-reads prices (`ITEM_UNAVAILABLE`, `PRICE_CHANGED`), then claims the key in the same transaction that inserts the order.
+3. A concurrent duplicate that loses the claim waits on the key's row and replays the winner's response, as in Catalog (RFC-0005 §4.4).
+
+The request hash covers what the client sent (`expectedTotal`, `shippingAddress`, `paymentMethod`), not the cart lines. So a retry with an emptied cart is still "the same request", and a different body under the same key is `422 IDEMPOTENCY_KEY_REUSED`.
 
 **Internal gRPC** (`contracts/proto`):
 
@@ -175,11 +183,14 @@ CREATE TABLE sagas (
     pending_command  JSONB,                           -- the next call to make, if any
     attempt          INT NOT NULL DEFAULT 0,
     next_attempt_at  TIMESTAMPTZ,                     -- when the runner should (re)try pending_command
-    payment_deadline TIMESTAMPTZ,                     -- set on entering AWAITING_PAYMENT
+    claimed_until    TIMESTAMPTZ,                     -- lease: a runner is executing pending_command until then
+    reservation_expires_at TIMESTAMPTZ,               -- from ReserveStock's reply (Inventory's clock)
+    payment_deadline TIMESTAMPTZ,                     -- min(reservation_expires_at - 2m, intent expires_at); §4.4
+    cancel_published BOOLEAN NOT NULL DEFAULT false,  -- order.cancelled goes out once per order
     version          INT NOT NULL DEFAULT 1,
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- The runner's queue: work that is due now.
+-- The runner's queue: work that is due now and not leased (claimed_until null or past; §4.7).
 CREATE INDEX sagas_due ON sagas (next_attempt_at) WHERE pending_command IS NOT NULL;
 CREATE INDEX sagas_deadline ON sagas (payment_deadline) WHERE state = 'AWAITING_PAYMENT';
 
@@ -266,23 +277,23 @@ States and the order status each maps to (system design §5, refined with `CREAT
 | Saga state | Order status | Pending command |
 |---|---|---|
 | `RESERVING_STOCK` | `PENDING` | `ReserveStock(order_id, lines, ttl=10m)` |
-| `CREATING_PAYMENT` | `PENDING` | `CreatePaymentIntent(order_id, key=order_id, total)` |
+| `CREATING_PAYMENT` | `PENDING` | `CreatePaymentIntent(order_id, key=order_id, total, expires_at = reservation_expires_at − 2m)` |
 | `AWAITING_PAYMENT` | `AWAITING_PAYMENT` | — (waits for an event or the deadline) |
 | `COMMITTING_STOCK` | `PAID` | `CommitReservation(order_id)` |
 | `COMPLETED` | `CONFIRMED` | — (terminal; outbox `order.confirmed`) |
 | `CANCELLING` | `CANCELLED` | `VoidPaymentIntent` (if an intent exists), then `ReleaseReservation` |
 | `REFUNDING` | `CANCELLED` | `RefundPayment(order_id, key=order_id:refund)`, then `ReleaseReservation` if still held |
-| `CANCELLED` | `CANCELLED` | — (terminal; outbox `order.cancelled` with `reason`) |
+| `CANCELLED` | `CANCELLED` | — (terminal; outbox `order.cancelled` with `reason`, **only on the first entry**: `cancel_published` guards it, so a later `CANCELLED → REFUNDING → CANCELLED` emits nothing new; the refund is visible as `payment.refunded`) |
 | `NEEDS_ATTENTION` | unchanged | — (a compensation exhausted its budget; listed for an admin) |
 
 **Transitions.** "Event" is either a command's result or a consumed event. Rows marked † are the late or out-of-order arrivals the testing strategy asks for.
 
 | From | Event | To | Notes |
 |---|---|---|---|
-| `RESERVING_STOCK` | `StockReserved` | `CREATING_PAYMENT` | |
+| `RESERVING_STOCK` | `StockReserved` | `CREATING_PAYMENT` | Stores `reservation_expires_at` from Inventory's reply |
 | `RESERVING_STOCK` | `InsufficientStock` | `CANCELLED` | `reason=INSUFFICIENT_STOCK`; nothing to compensate |
 | `RESERVING_STOCK` | retries exhausted | `CANCELLING` | Release is a no-op if nothing was reserved |
-| `CREATING_PAYMENT` | `IntentCreated` | `AWAITING_PAYMENT` | Stores `payment_url`; sets `payment_deadline = now + 8m` |
+| `CREATING_PAYMENT` | `IntentCreated` | `AWAITING_PAYMENT` | Stores `payment_url`; `payment_deadline = min(reservation_expires_at − 2m, intent expires_at)`, absolute times from the replies, so a slow step can't push the deadline past the reservation |
 | `CREATING_PAYMENT` | retries exhausted | `CANCELLING` | `reason=PAYMENT_UNAVAILABLE` |
 | `CREATING_PAYMENT` | `payment.succeeded` † | `COMMITTING_STOCK` | The buyer paid before the intent's reply was recorded |
 | `AWAITING_PAYMENT` | `payment.succeeded` | `COMMITTING_STOCK` | |
@@ -293,7 +304,7 @@ States and the order status each maps to (system design §5, refined with `CREAT
 | `COMMITTING_STOCK` | `ReservationNotFound` | `REFUNDING` | `reason=STOCK_UNAVAILABLE` (system design §5, third flow) |
 | `COMMITTING_STOCK` | retries exhausted | `REFUNDING` | Money must not stay taken for an unconfirmed order |
 | `CANCELLING` | `IntentVoided` | `CANCELLING` | Then release |
-| `CANCELLING` | `AlreadyCaptured` † | `COMMITTING_STOCK` if the reservation is still active, else `REFUNDING` | The buyer paid as the deadline passed: honour it if stock is still held |
+| `CANCELLING` | `AlreadyCaptured` † | `COMMITTING_STOCK` | The buyer paid as the deadline passed. Void runs before release, so the reservation is normally still held: try to commit it. If it expired, `ReservationNotFound` takes the existing route to `REFUNDING`. No reservation state needs remembering. |
 | `CANCELLING` | `ReservationReleased` | `CANCELLED` | |
 | `CANCELLING` / `REFUNDING` | budget exhausted | `NEEDS_ATTENTION` | |
 | `REFUNDING` | `Refunded` | `REFUNDING`, then release, then `CANCELLED` | |
@@ -318,23 +329,25 @@ sequenceDiagram
     B->>G: POST /v1/checkout (Idempotency-Key, expectedTotal, address)
     G->>C: GET cart (user:sub)
     G->>O: CreateOrder(lines, expectedTotal, address, key)
+    O->>O: idempotency lookup (replay if this key was seen)
     O->>C: skus:lookup (current prices)
     alt price differs
         O-->>G: PRICE_CHANGED (new total)
     end
-    O->>O: tx: order PENDING + lines + saga RESERVING_STOCK + idempotency record
+    O->>O: tx: claim key + order PENDING + lines + saga RESERVING_STOCK
     O->>I: ReserveStock (runner, inline)
     I-->>O: reserved
     O->>P: CreatePaymentIntent (inline)
     P-->>O: intent, paymentUrl
-    O->>O: tx: saga AWAITING_PAYMENT, deadline now+8m
+    O->>O: tx: saga AWAITING_PAYMENT, deadline from the reservation and intent expiries
     O-->>G: 202 {orderId, AWAITING_PAYMENT, paymentUrl}
     G->>C: clear cart lines (best effort)
     G-->>B: 202
 ```
 
 - **Inline steps, then the background.** `CreateOrder` runs the first steps inline under a 2.5 s budget, so the usual reply already has `paymentUrl`. If a step is slow or fails transiently, the budget ends, the reply is `202` with `PENDING` and no URL, and the runner carries on in the background. The buyer's page polls `GET /v1/orders/{id}` until `paymentUrl` appears.
-- **One code path for both.** Inline execution is the runner's own step function, called directly. There's no second implementation of the saga.
+- **One code path for both.** Inline execution is the runner's own step function, called directly, and it takes the same lease as the runner (§4.7). There's no second implementation of the saga.
+- **The budget caps every inline call.** Each inline RPC gets the smaller of its own deadline (§4.6) and what is left of the 2.5 s budget. A call started near the end can't run past it, so the `202 PENDING` fallback always answers within the gateway's 3 s. Background retries and compensations keep their full deadlines.
 
 **Paying and confirming:**
 
@@ -377,7 +390,15 @@ sequenceDiagram
 
 ### 4.7 Concurrency and consistency
 
-- **One writer per saga at a time.** The runner claims due sagas with `SELECT ... FOR UPDATE SKIP LOCKED`, and the consumer locks the saga row (`FOR UPDATE`) before applying an event. Every change also bumps `version`. Several Order instances therefore never run the same step twice concurrently, and an event and a step result can't interleave.
+- **One writer per saga at a time, through a lease.** A row lock only lasts until its transaction commits, and the call happens after the claim commits. So the claim records a lease:
+  1. The runner selects due sagas with `pending_command IS NOT NULL AND next_attempt_at <= now() AND (claimed_until IS NULL OR claimed_until < now())`, using `FOR UPDATE SKIP LOCKED`, and sets `claimed_until = now() + 30 s` in the same transaction.
+  2. Thirty seconds is longer than any call's deadline (the longest is 5 s, §4.6), so a call ends before its lease does.
+  3. The result is applied only if `version` still matches, and that transaction clears `claimed_until`.
+  4. A crashed holder's lease simply expires, and the saga is due again.
+  5. Inline steps in `CreateOrder` take the same lease, so the background runner can't start a step the request is still running.
+  6. The consumer locks the saga row (`FOR UPDATE`) before applying an event. An event arriving while a call is leased only changes state; a pending command it supersedes is replaced, and the leased call's late result is discarded by the version check.
+
+  Several Order instances, or several runner threads, therefore never run the same step concurrently. Idempotent RPCs remain the second line of defence.
 - **Persist, then call.** A transition and its next command commit together. The call happens after commit, and its result is a new event applied in a new transaction. A crash between call and result leaves the command pending, and repeating it is safe because every downstream RPC is idempotent on the order ID.
 - **Events and the inbox commit together.** Order applies a consumed event and inserts `processed_events` in one transaction. Kafka offsets are committed after, so a redelivery after a crash is caught by the inbox.
 - **Partitioning by order ID** keeps one order's events in order within a topic. Across topics (payment vs inventory) there is no ordering, which the late-arrival rows of the table cover.
@@ -452,7 +473,11 @@ sequenceDiagram
   - Payment's intent state machine and ledger arithmetic.
   - The webhook signature.
 - **Integration (Testcontainers):**
-  - Order with Postgres and Redpanda: runner claims under concurrency (two runners, one saga), restart mid-step, inbox dedupe, deadline scan, the outbox producing exactly one event per transition.
+  - Order with Postgres and Redpanda:
+    - runner claims under concurrency (two runners, one saga, one call), the lease expiring after a crash, and inline steps racing the runner;
+    - restart mid-step, inbox dedupe, and the deadline scan;
+    - the outbox producing exactly one event per transition, and `order.cancelled` once even after a late refund;
+    - a lost `202` retried with an emptied cart replaying the original order.
   - Payment with Postgres: FR-07's 10 retries produce one intent; three identical webhooks produce one capture and one ledger pair; debits equal credits; void racing a webhook.
   - Mock provider: every control mode.
 - **Contract:** the new proto and events validated as before (buf breaking, schema examples), Order's events against their schemas, and the gateway's checkout responses against `public-v1.yaml`.
@@ -512,4 +537,5 @@ Nothing in Stage 1's services changes behaviour, except Inventory's saga RPCs st
 | 2026-10-26 | Shipping address: name, phone, address line, city, province, postal code | Shape validation only; the first personal data in Sagamart, kept in Order and out of logs, traces and events (§8) |
 | 2026-10-26 | One Order instance until the Scale release | Multi-instance safety is designed in (§4.7) but not exercised before RFC-0004 |
 | 2026-10-26 | Shipping-address retention deferred to Core complete | Decided with real auth and buyer accounts |
-| 2026-10-26 | Accepted | Self-review by the author. The automated review (CodeRabbit) did not run on this PR (free-plan limit), so there was no outside review; rollout §10 becomes issues in the Checkout saga milestone |
+| 2026-10-26 | Accepted | Self-review by the author; rollout §10 became issues #57–#66 in the Checkout saga milestone |
+| 2026-10-26 | Revised after automated review (7 findings, all accepted) | CodeRabbit reviewed after acceptance. The changes: **a claim lease** (`claimed_until`, 30 s, also taken by inline steps), so no two runners execute one step concurrently. The **idempotency lookup before cart and price checks**, with the hash over the client's body, so a retry after a lost `202` replays the order. The **payment deadline anchored to the reservation and intent expiries**, not to when Order recorded the intent. **`order.cancelled` published once** per order. **Inline calls capped by the remaining inline budget.** **`AlreadyCaptured` always tries to commit**, with `ReservationNotFound` routing to the refund. System design's SSE step labelled as the Events-stage target. |

@@ -177,8 +177,10 @@ sequenceDiagram
     O->>O: order CONFIRMED + outbox
     O-)K: order.confirmed
     K-)W: order.confirmed
-    W-)B: SSE: status = CONFIRMED
+    W-)B: SSE: status = CONFIRMED (Events stage)
 ```
+
+The last two steps are the target state: live status over SSE arrives with the Events stage (FR-09). Until then the buyer's page polls `GET /v1/orders/{id}` ([RFC-0002](../rfc/0002-checkout-saga.md)).
 
 ### Failure path: payment fails or times out
 
