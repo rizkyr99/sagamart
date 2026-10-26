@@ -1,6 +1,7 @@
 import { createPrivateKey } from 'node:crypto';
 import { loadConfig } from '@sagamart/node-common';
 import { z } from 'zod';
+import { DEADLINES } from './deadline.js';
 
 const bool = z.enum(['true', 'false']).transform((v) => v === 'true');
 const int = (min: number, max: number) => z.coerce.number().int().min(min).max(max);
@@ -22,6 +23,7 @@ const envSchema = z
     GATEWAY_HTTP_PORT: int(1, 65535).default(8100),
     GATEWAY_TRUST_PROXY: bool.default(false),
     GATEWAY_REQUEST_DEADLINE_MS: int(100, 60_000).default(5000),
+    GATEWAY_STOCK_DEADLINE_MS: int(10, 5000).default(DEADLINES.inventoryStockLevels),
     GATEWAY_DEV_AUTH: bool.default(false),
     GATEWAY_DEV_JWT_SECRET: z.string().optional(),
     GATEWAY_IDENTITY_KEY_ID: z.string().min(1),
@@ -57,6 +59,8 @@ export interface GatewayConfig {
   trustProxy: boolean;
   /** Budget for one incoming request; outbound calls never outlive it. */
   requestDeadlineMs: number;
+  /** How long a page waits for Inventory's stock before showing UNKNOWN (RFC-0005 §4.4: 150 ms). */
+  stockDeadlineMs: number;
   devAuth: { enabled: boolean; secret: string | undefined };
   /** The key that signs x-sagamart-identity (contracts/identity.md); services hold the public half. */
   identity: { keyId: string; privateKey: string };
@@ -79,6 +83,7 @@ export function loadGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
     httpPort: e.GATEWAY_HTTP_PORT,
     trustProxy: e.GATEWAY_TRUST_PROXY,
     requestDeadlineMs: e.GATEWAY_REQUEST_DEADLINE_MS,
+    stockDeadlineMs: e.GATEWAY_STOCK_DEADLINE_MS,
     devAuth: {
       enabled: e.GATEWAY_DEV_AUTH,
       secret: e.GATEWAY_DEV_AUTH ? e.GATEWAY_DEV_JWT_SECRET : undefined,

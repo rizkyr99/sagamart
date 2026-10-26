@@ -75,7 +75,7 @@ export class CartController {
     const stock = await this.inventory.availability(
       body.lines.map((l) => l.sku),
       caller,
-      deadlineOf(req).cap(DEADLINES.inventoryStockLevels),
+      deadlineOf(req),
     );
     return {
       ...body,

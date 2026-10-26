@@ -63,7 +63,7 @@ export class BrowseController {
     const stock = await this.inventory.availability(
       body.items.flatMap((p) => p.skus),
       caller,
-      deadlineOf(req).cap(DEADLINES.inventoryStockLevels),
+      deadlineOf(req),
     );
     return {
       items: body.items.map(({ skus, ...product }) => ({
@@ -86,7 +86,7 @@ export class BrowseController {
     const stock = await this.inventory.availability(
       body.skus.map((s) => s.sku),
       caller,
-      deadlineOf(req).cap(DEADLINES.inventoryStockLevels),
+      deadlineOf(req),
     );
     const skus = body.skus.map((s) => {
       const available = stock.get(s.sku) ?? null;

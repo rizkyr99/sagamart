@@ -25,11 +25,13 @@ const unknownStock = metrics.getMeter('@sagamart/gateway').createCounter('sagama
 export class InventoryClient implements OnApplicationBootstrap {
   private readonly log = new Logger('InventoryClient');
   private readonly client: Client<typeof InventoryService>;
+  private readonly stockDeadlineMs: number;
 
   constructor(
     @Inject(GATEWAY_CONFIG) config: GatewayConfig,
     private readonly internal: InternalClient,
   ) {
+    this.stockDeadlineMs = config.stockDeadlineMs;
     this.client = createClient(
       InventoryService,
       createGrpcTransport({
@@ -103,13 +105,15 @@ export class InventoryClient implements OnApplicationBootstrap {
 
   /**
    * Available units per SKU for display; null for UNKNOWN. Never throws: browsing renders without stock
-   * (RFC-0005 §4.4). All batches share `deadline`, which callers cap at 150 ms.
+   * (RFC-0005 §4.4). All batches share one deadline: the request's, capped at GATEWAY_STOCK_DEADLINE_MS (150 ms).
    */
   async availability(
     skus: readonly string[],
     caller: Caller,
-    deadline: Deadline,
+    requestDeadline: Deadline,
   ): Promise<Map<string, number | null>> {
+    // Stock is optional on a page: wait at most GATEWAY_STOCK_DEADLINE_MS, and never past the request's own budget.
+    const deadline = requestDeadline.cap(this.stockDeadlineMs);
     const identity = this.internal.identityFor(caller, 'inventory');
     return lookupStock(
       skus,
