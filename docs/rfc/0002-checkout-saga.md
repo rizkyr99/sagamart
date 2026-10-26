@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Author** | Rizky |
-| **Status** | In review |
+| **Status** | Accepted |
 | **Created** | 2026-10-23 |
 | **Stage** | 2 Checkout saga |
 | **Related** | PRD [FR-06, FR-07, FR-08, FR-12, J3, J5](../product/prd.md); [System Design §5](../architecture/system-design.md#5-key-flow-checkout-saga); [Context Map](../architecture/context-map.md); [ADR-0004](../adr/0004-database-per-service.md), [ADR-0005](../adr/0005-orchestrated-checkout-saga.md), [ADR-0006](../adr/0006-transactional-outbox.md); [RFC-0001](0001-inventory-reservation.md), [RFC-0005](0005-catalog-cart-gateway.md); [identity contract](../../contracts/identity.md) |
@@ -477,7 +477,7 @@ Each step is an issue and a PR, in order. Steps 2–3 and 5–7 can run in paral
    - the public checkout and orders routes;
    - identity contract v1.1 (service identities);
    - `payment-provider.md` (webhook).
-2. **Order skeleton** (Java 25, Spring Boot, Maven): config, health, metrics, JSON logs, Flyway, Dockerfile, Compose, and a CI job. This needs Maven on the developer machine (open question).
+2. **Order skeleton** (Java 25, Spring Boot, Maven Wrapper): config, health, metrics, JSON logs, Flyway, Dockerfile, Compose, and a CI job.
 3. **The saga state machine,** pure and test-first from the table, with the property test.
 4. **Order persistence and runner:**
    - tables and the runner;
@@ -496,14 +496,20 @@ Nothing in Stage 1's services changes behaviour, except Inventory's saga RPCs st
 
 ## 11. Open questions
 
-- [ ] **Java build tool:** Maven (recommended: the Spring Boot default, simplest CI) or Gradle? It must be installed before step 2.
-- [ ] **Guest checkout:** out of the MVP as proposed (buyers sign in). Agreed?
-- [ ] **Shipping address fields:** name, phone, address line, city, province, postal code; validated for shape only. Enough for the MVP?
-- [ ] **Order instances:** one, with the runner using `SKIP LOCKED`, so a second instance is safe but not needed until the Scale release. Agreed?
-- [ ] **Personal-data retention** for shipping addresses: defer to Core complete (with real auth and buyer accounts)?
+- [x] **Java build tool:** **Maven, through the Maven Wrapper** (`mvnw` committed in `services/order`). The project pins its Maven version and nothing needs installing: the developer machine already has Maven 3.9.11 cached in `~/.m2/wrapper`, while apt's Maven is 3.6.3 (2019).
+- [x] **Guest checkout:** **out of the MVP.** Buyers sign in to check out; an order belongs to its buyer's `sub`.
+- [x] **Shipping address fields:** **name, phone, address line, city, province, postal code**, validated for shape only.
+- [x] **Order instances:** **one until the Scale release.** The runner's `SKIP LOCKED` claims make a second instance safe when it comes.
+- [x] **Personal-data retention** for shipping addresses: **deferred to Core complete**, with real auth and buyer accounts.
 
 ## 12. Decision log
 
 | Date | Decision | Notes |
 |---|---|---|
 | 2026-10-23 | Draft opened | |
+| 2026-10-26 | Maven through the Maven Wrapper | The wrapper pins the version for every machine and CI; apt's Maven 3.6.3 is too old for Spring Boot 4 on Java 25 |
+| 2026-10-26 | No guest checkout in the MVP | An order needs an owner for FR-10 (order history) and for `GetOrder` authorization; cart merge (FR-05) arrives in Core complete |
+| 2026-10-26 | Shipping address: name, phone, address line, city, province, postal code | Shape validation only; the first personal data in Sagamart, kept in Order and out of logs, traces and events (§8) |
+| 2026-10-26 | One Order instance until the Scale release | Multi-instance safety is designed in (§4.7) but not exercised before RFC-0004 |
+| 2026-10-26 | Shipping-address retention deferred to Core complete | Decided with real auth and buyer accounts |
+| 2026-10-26 | Accepted | Self-review by the author. The automated review (CodeRabbit) did not run on this PR (free-plan limit), so there was no outside review; rollout §10 becomes issues in the Checkout saga milestone |
