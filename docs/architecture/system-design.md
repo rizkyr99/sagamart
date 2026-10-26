@@ -177,8 +177,10 @@ sequenceDiagram
     O->>O: order CONFIRMED + outbox
     O-)K: order.confirmed
     K-)W: order.confirmed
-    W-)B: SSE: status = CONFIRMED
+    W-)B: SSE: status = CONFIRMED (Events stage)
 ```
+
+The last two steps are the target state: live status over SSE arrives with the Events stage (FR-09). Until then the buyer's page polls `GET /v1/orders/{id}` ([RFC-0002](../rfc/0002-checkout-saga.md)).
 
 ### Failure path: payment fails or times out
 
@@ -234,14 +236,14 @@ These are separate on purpose. **Order status** is what the buyer sees; **saga s
 
 | Order status (customer-visible) | Saga states that map to it |
 |---|---|
-| `PENDING` | `STARTED`, `RESERVING_STOCK` |
+| `PENDING` | `RESERVING_STOCK`, `CREATING_PAYMENT` |
 | `AWAITING_PAYMENT` | `AWAITING_PAYMENT` |
 | `PAID` | `COMMITTING_STOCK` |
 | `CONFIRMED` | `COMPLETED` |
 | `CANCELLED` | `CANCELLING`, `REFUNDING`, `CANCELLED` |
 | (unchanged; operator alerted) | `NEEDS_ATTENTION` |
 
-`SHIPPED` and `DELIVERED` are order statuses set by an admin after the saga completes (PRD FR-16); they are not saga states. The full transition table is defined in RFC-0002.
+`SHIPPED` and `DELIVERED` are order statuses set by an admin after the saga completes (PRD FR-16); they are not saga states. The full transition table is in [RFC-0002 §4.4](../rfc/0002-checkout-saga.md#44-the-state-machine).
 
 ## 6. Data management
 
