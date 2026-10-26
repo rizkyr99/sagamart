@@ -87,6 +87,7 @@ Errors are RFC 9457 Problem Details with a stable `code` and the request's `trac
 | `GATEWAY_REDIS_URL` | `redis://localhost:6380` | Rate limits only; nothing durable |
 | `GATEWAY_RATE_LIMIT_PER_SECOND`, `GATEWAY_RATE_LIMIT_BURST` | `20`, `40` | Per user or per IP |
 | `GATEWAY_REQUEST_DEADLINE_MS` | `5000` | Budget for one incoming request |
+| `GATEWAY_STOCK_DEADLINE_MS` | `150` | How long a page waits for Inventory's stock before showing `UNKNOWN` (RFC-0005 §4.4) |
 | `GATEWAY_TRUST_PROXY` | `false` | Client IP from `X-Forwarded-For`; only behind a proxy we run |
 | `GATEWAY_LOG_LEVEL`, `GATEWAY_VERSION`, `OTEL_EXPORTER_OTLP_ENDPOINT` | `info`, `dev`, empty | |
 

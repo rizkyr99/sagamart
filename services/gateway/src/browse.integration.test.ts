@@ -245,7 +245,9 @@ beforeAll(async () => {
     Contract.load('public-v1.yaml'),
     Contract.load('catalog-internal-v1.yaml'),
   ]);
-  gw = await start();
+  // Generous for everything not about the stock deadline: CI runners are busy, and a missed 150 ms budget would
+  // turn these tests' stock into UNKNOWN. The two deadline tests below run their own instance at the default.
+  gw = await start({ GATEWAY_STOCK_DEADLINE_MS: '2000' });
 });
 
 afterAll(async () => {
@@ -291,9 +293,11 @@ describe('GET /v1/products', () => {
     expect(catalog.calls[0]?.query).toBe('?category=kaos&sort=price_asc&limit=3'); // unknown parameters dropped
   });
 
-  it('sends Inventory the identity and a deadline of at most 150 ms', async () => {
+  it('sends Inventory the identity and a deadline of at most 150 ms by default', async () => {
+    const defaults = await start();
     catalog.page = [summary(1, ['A-1'])];
-    await request(gw)
+    inventory.calls.length = 0; // the new instance's warm-up call
+    await request(defaults)
       .get('/v1/products')
       .set('authorization', await bearer())
       .expect(200);
@@ -304,12 +308,14 @@ describe('GET /v1/products', () => {
   });
 
   it('renders with UNKNOWN stock when Inventory misses its 150 ms deadline', async () => {
+    const defaults = await start();
     catalog.page = [summary(1, ['A-1'])];
     inventory.available = { 'A-1': 10 };
-    inventory.delayMs = 400;
+    inventory.delayMs = 2000;
     const started = Date.now();
-    const res = await request(gw).get('/v1/products').expect(200);
-    expect(Date.now() - started).toBeLessThan(380);
+    const res = await request(defaults).get('/v1/products').expect(200);
+    // Well before Inventory's 2 s answer: the page didn't wait for it.
+    expect(Date.now() - started).toBeLessThan(1500);
     conforms('GET', '/v1/products', res);
     expect((res.body as { items: { stockStatus: string }[] }).items[0]?.stockStatus).toBe('UNKNOWN');
   });

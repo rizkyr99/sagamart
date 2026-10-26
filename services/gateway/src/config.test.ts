@@ -28,6 +28,7 @@ describe('loadGatewayConfig', () => {
       httpPort: 8100,
       trustProxy: false,
       requestDeadlineMs: 5000,
+      stockDeadlineMs: 150,
       devAuth: { enabled: false, secret: undefined },
       identity: { keyId: 'gw-1', privateKey },
       catalogUrl: 'http://localhost:8120',
