@@ -41,12 +41,21 @@ const (
 //	IDEMPOTENCY_KEY_REUSED  ALREADY_EXISTS       the key was used with a different request
 //	ORDER_NOT_FOUND         NOT_FOUND            unknown, or not the caller's (never reveals other buyers' orders)
 //
+// A CreateOrder or GetOrder call whose identity has no sub (a guest) is UNAUTHENTICATED; ListOrders and GetSaga
+// without the admin role are PERMISSION_DENIED.
 // Malformed requests return INVALID_ARGUMENT with a google.rpc.BadRequest detail.
 type OrderServiceClient interface {
 	// CreateOrder checks out the lines (the buyer's cart) at Catalog's current prices and starts the saga.
-	// Idempotent on (buyer, idempotency_key), checked before the lines and prices (RFC-0002 §4.2): a repeat returns
-	// the original order with its current status, even if the cart was emptied in between. The first saga steps run
-	// inline under a 2.5 s budget, so the reply usually already has payment_url.
+	// The buyer is the identity's sub: a token without one (a guest) is UNAUTHENTICATED, whatever the caller checked.
+	// Idempotent on (buyer, idempotency_key), checked before the lines and prices (RFC-0002 §4.2):
+	//   - once an order exists for the key, a repeat returns that order with its current status, even if the cart
+	//     was emptied in between. That includes an order recorded CANCELLED for INSUFFICIENT_STOCK: the repeat
+	//     returns the cancelled order, not the error again;
+	//   - CART_EMPTY, ITEM_UNAVAILABLE and PRICE_CHANGED create no order and don't claim the key, so a repeat is
+	//     evaluated afresh;
+	//   - a concurrent duplicate waits for the first and returns its order.
+	//
+	// The first saga steps run inline under a 2.5 s budget, so the reply usually already has payment_url.
 	CreateOrder(ctx context.Context, in *CreateOrderRequest, opts ...grpc.CallOption) (*CreateOrderResponse, error)
 	// GetOrder returns an order to its buyer or an admin; anyone else gets ORDER_NOT_FOUND.
 	GetOrder(ctx context.Context, in *GetOrderRequest, opts ...grpc.CallOption) (*GetOrderResponse, error)
@@ -120,12 +129,21 @@ func (c *orderServiceClient) GetSaga(ctx context.Context, in *GetSagaRequest, op
 //	IDEMPOTENCY_KEY_REUSED  ALREADY_EXISTS       the key was used with a different request
 //	ORDER_NOT_FOUND         NOT_FOUND            unknown, or not the caller's (never reveals other buyers' orders)
 //
+// A CreateOrder or GetOrder call whose identity has no sub (a guest) is UNAUTHENTICATED; ListOrders and GetSaga
+// without the admin role are PERMISSION_DENIED.
 // Malformed requests return INVALID_ARGUMENT with a google.rpc.BadRequest detail.
 type OrderServiceServer interface {
 	// CreateOrder checks out the lines (the buyer's cart) at Catalog's current prices and starts the saga.
-	// Idempotent on (buyer, idempotency_key), checked before the lines and prices (RFC-0002 §4.2): a repeat returns
-	// the original order with its current status, even if the cart was emptied in between. The first saga steps run
-	// inline under a 2.5 s budget, so the reply usually already has payment_url.
+	// The buyer is the identity's sub: a token without one (a guest) is UNAUTHENTICATED, whatever the caller checked.
+	// Idempotent on (buyer, idempotency_key), checked before the lines and prices (RFC-0002 §4.2):
+	//   - once an order exists for the key, a repeat returns that order with its current status, even if the cart
+	//     was emptied in between. That includes an order recorded CANCELLED for INSUFFICIENT_STOCK: the repeat
+	//     returns the cancelled order, not the error again;
+	//   - CART_EMPTY, ITEM_UNAVAILABLE and PRICE_CHANGED create no order and don't claim the key, so a repeat is
+	//     evaluated afresh;
+	//   - a concurrent duplicate waits for the first and returns its order.
+	//
+	// The first saga steps run inline under a 2.5 s budget, so the reply usually already has payment_url.
 	CreateOrder(context.Context, *CreateOrderRequest) (*CreateOrderResponse, error)
 	// GetOrder returns an order to its buyer or an admin; anyone else gets ORDER_NOT_FOUND.
 	GetOrder(context.Context, *GetOrderRequest) (*GetOrderResponse, error)

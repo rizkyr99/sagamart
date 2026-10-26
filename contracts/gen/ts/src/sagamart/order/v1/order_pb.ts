@@ -784,6 +784,8 @@ export const SagaStepOutcomeSchema: GenEnum<SagaStepOutcome> = /*@__PURE__*/
  *   INSUFFICIENT_STOCK      FAILED_PRECONDITION  Inventory refused; the order is recorded CANCELLED, plus an InsufficientStockDetail
  *   IDEMPOTENCY_KEY_REUSED  ALREADY_EXISTS       the key was used with a different request
  *   ORDER_NOT_FOUND         NOT_FOUND            unknown, or not the caller's (never reveals other buyers' orders)
+ * A CreateOrder or GetOrder call whose identity has no sub (a guest) is UNAUTHENTICATED; ListOrders and GetSaga
+ * without the admin role are PERMISSION_DENIED.
  * Malformed requests return INVALID_ARGUMENT with a google.rpc.BadRequest detail.
  *
  * @generated from service sagamart.order.v1.OrderService
@@ -791,9 +793,15 @@ export const SagaStepOutcomeSchema: GenEnum<SagaStepOutcome> = /*@__PURE__*/
 export const OrderService: GenService<{
   /**
    * CreateOrder checks out the lines (the buyer's cart) at Catalog's current prices and starts the saga.
-   * Idempotent on (buyer, idempotency_key), checked before the lines and prices (RFC-0002 §4.2): a repeat returns
-   * the original order with its current status, even if the cart was emptied in between. The first saga steps run
-   * inline under a 2.5 s budget, so the reply usually already has payment_url.
+   * The buyer is the identity's sub: a token without one (a guest) is UNAUTHENTICATED, whatever the caller checked.
+   * Idempotent on (buyer, idempotency_key), checked before the lines and prices (RFC-0002 §4.2):
+   *   - once an order exists for the key, a repeat returns that order with its current status, even if the cart
+   *     was emptied in between. That includes an order recorded CANCELLED for INSUFFICIENT_STOCK: the repeat
+   *     returns the cancelled order, not the error again;
+   *   - CART_EMPTY, ITEM_UNAVAILABLE and PRICE_CHANGED create no order and don't claim the key, so a repeat is
+   *     evaluated afresh;
+   *   - a concurrent duplicate waits for the first and returns its order.
+   * The first saga steps run inline under a 2.5 s budget, so the reply usually already has payment_url.
    *
    * @generated from rpc sagamart.order.v1.OrderService.CreateOrder
    */

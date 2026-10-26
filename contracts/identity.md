@@ -79,7 +79,8 @@ Then authorize:
 | Calls a user makes through the gateway (Catalog browse, carts and admin; Inventory `GetStockLevels` and `SetStockLevel`; Order `OrderService`) | `iss: "gateway"` | as above |
 | Admin operations (Catalog `/internal/v1/admin/*`, Inventory `SetStockLevel`, Order `ListOrders` and `GetSaga`) | `admin` in `roles` | HTTP `403` `FORBIDDEN` / gRPC `PERMISSION_DENIED` |
 | A user's cart (`user:<id>` cart key) | `sub` equals `<id>` | HTTP `403` `FORBIDDEN` |
-| A user's order (Order `GetOrder`) | `sub` is the order's buyer, or `admin` in `roles` | gRPC `NOT_FOUND` (never reveals other buyers' orders) |
+| Checking out (Order `CreateOrder`) | `sub` present: the buyer, and the scope of the idempotency key. Guests have none. | gRPC `UNAUTHENTICATED` (the gateway's `401`) |
+| A user's order (Order `GetOrder`) | `sub` is the order's buyer, or `admin` in `roles` | gRPC `UNAUTHENTICATED` without `sub`; `NOT_FOUND` for someone else's order (never reveals other buyers' orders) |
 | Saga commands (Inventory `ReserveStock`, `CommitReservation`, `ReleaseReservation`; every `PaymentService` RPC) | `iss: "order"` with `service:order` in `roles` | gRPC `PERMISSION_DENIED` |
 | Price lookups (Catalog `skus:lookup`) | `iss: "gateway"` or `iss: "order"` | as above |
 

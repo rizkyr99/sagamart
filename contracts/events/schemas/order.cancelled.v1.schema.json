@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sagamart.dev/schemas/events/schemas/order.cancelled.v1.schema.json",
   "title": "order.cancelled/v1",
-  "description": "An order was cancelled and its stock released, with any capture refunded (RFC-0002 \u00a74.4). Published once per order, on the first cancellation. Carries no personal data.",
+  "description": "An order was cancelled and its stock released (RFC-0002 \u00a74.4). Published once per order, on the first cancellation. It is not proof of a refund: if a payment was captured, the refund may complete after this event, and payment.refunded is what records it. Carries no personal data.",
   "allOf": [
     {
       "$ref": "../envelope.schema.json"

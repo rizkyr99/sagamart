@@ -50,7 +50,7 @@ A session that is `CAPTURED` can never become `VOIDED`, and a `VOIDED` or `EXPIR
 }
 ```
 
-- **Types:** `session.captured`, `session.declined`, `session.expired`, `session.refunded`.
+- **Types:** `session.captured`, `session.declined`, `session.voided`, `session.expired`, `session.refunded`, one per status change, with the same payload. `session.voided` follows a successful void; Payment already knows from the void's own answer, so it treats the webhook as a confirmation.
 - **Delivery is at least once,** with retries on any non-`2xx` answer: 1 s, 5 s, 30 s, 2 min, 10 min. The same `eventId` may arrive several times, and Payment applies each `eventId` once.
 - **Payment answers `200` to a duplicate.** A `4xx` or `5xx` makes the provider retry, so Payment only refuses webhooks it can't trust or can't store.
 

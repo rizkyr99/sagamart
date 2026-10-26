@@ -487,8 +487,15 @@ paths:
         ([RFC-0002](https://github.com/rizkyr99/sagamart/blob/main/docs/rfc/0002-checkout-saga.md)). No guest checkout:
         buyers sign in first.
 
-        - **`Idempotency-Key` required.** A retry with the same key and body returns the original order, even after
-          the cart was cleared; the same key with another body is `422 IDEMPOTENCY_KEY_REUSED`.
+        - **Signed-in buyers only.** A guest (no user) is `401`.
+        - **`Idempotency-Key` required.** Retries with the same key and body:
+          - once an order exists for the key, the retry gets `202` with **that order as it is now**, even after the
+            cart was cleared. That includes an order recorded `CANCELLED` for `INSUFFICIENT_STOCK`: the retry
+            returns the cancelled order, not the `409` again;
+          - `CART_EMPTY`, `ITEM_UNAVAILABLE` and `PRICE_CHANGED` create no order, so a retry is evaluated afresh;
+          - a retry that arrives while the first is still running waits for it and gets the same order. If that
+            takes longer than the gateway can wait, the answer is `503`, and retrying later returns the order.
+          - The same key with another body is `422 IDEMPOTENCY_KEY_REUSED`.
         - **`expectedTotal`** is the total the buyer saw. If prices changed, the answer is `409 PRICE_CHANGED` with the
           current total, and nothing is ordered.
         - The cart's lines are cleared after a `202`.
