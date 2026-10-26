@@ -1,0 +1,16 @@
+{
+  "id": "0199f2b2-0005-7a00-8b00-000000000005",
+  "type": "order.cancelled",
+  "source": "order",
+  "specversion": "1.0",
+  "time": "2026-10-26T03:13:03.288Z",
+  "subject": "0199f2b1-7a10-7b2c-9d3e-4f5a6b7c8d02",
+  "dataschema": "order.cancelled/v1",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "data": {
+    "orderId": "0199f2b1-7a10-7b2c-9d3e-4f5a6b7c8d02",
+    "buyerId": "0199f2e0-0000-7000-8000-000000000001",
+    "reason": "PAYMENT_FAILED",
+    "cancelledAt": "2026-10-26T03:13:03.288Z"
+  }
+}

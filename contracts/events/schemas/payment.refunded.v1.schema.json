@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sagamart.dev/schemas/events/schemas/payment.refunded.v1.schema.json",
+  "title": "payment.refunded/v1",
+  "description": "A captured payment was refunded in full, as saga compensation (RFC-0002 \u00a74.4). At most one per intent.",
+  "allOf": [
+    {
+      "$ref": "../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "payment.refunded"
+    },
+    "source": {
+      "const": "payment"
+    },
+    "dataschema": {
+      "const": "payment.refunded/v1"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "orderId",
+        "paymentIntentId",
+        "refundId",
+        "amount",
+        "refundedAt"
+      ],
+      "properties": {
+        "orderId": {
+          "description": "Also the event subject.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "paymentIntentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "refundId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "amount": {
+          "type": "object",
+          "required": [
+            "amount",
+            "currency"
+          ],
+          "properties": {
+            "amount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "currency": {
+              "const": "IDR"
+            }
+          },
+          "additionalProperties": false
+        },
+        "refundedAt": {
+          "description": "When the refund was recorded, UTC.",
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

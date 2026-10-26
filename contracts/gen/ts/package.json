@@ -9,6 +9,10 @@
       "types": "./dist/sagamart/inventory/v1/inventory_pb.d.ts",
       "default": "./dist/sagamart/inventory/v1/inventory_pb.js"
     },
+    "./order/v1": {
+      "types": "./dist/sagamart/order/v1/order_pb.d.ts",
+      "default": "./dist/sagamart/order/v1/order_pb.js"
+    },
     "./payment/v1": {
       "types": "./dist/sagamart/payment/v1/payment_pb.d.ts",
       "default": "./dist/sagamart/payment/v1/payment_pb.js"

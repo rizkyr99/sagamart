@@ -1,0 +1,19 @@
+{
+  "id": "0199f2b2-0001-7a00-8b00-000000000001",
+  "type": "payment.succeeded",
+  "source": "payment",
+  "specversion": "1.0",
+  "time": "2026-10-26T03:12:40.118Z",
+  "subject": "0199f2b1-7a10-7b2c-9d3e-4f5a6b7c8d01",
+  "dataschema": "payment.succeeded/v1",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "data": {
+    "orderId": "0199f2b1-7a10-7b2c-9d3e-4f5a6b7c8d01",
+    "paymentIntentId": "0199f2b1-7b22-7c31-a4d5-6e7f8091a2b4",
+    "amount": {
+      "amount": 158000,
+      "currency": "IDR"
+    },
+    "capturedAt": "2026-10-26T03:12:40.118Z"
+  }
+}

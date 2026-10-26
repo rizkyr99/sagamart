@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file sagamart/payment/v1/payment.proto.
  */
 export const file_sagamart_payment_v1_payment: GenFile = /*@__PURE__*/
-  fileDesc("CiFzYWdhbWFydC9wYXltZW50L3YxL3BheW1lbnQucHJvdG8SE3NhZ2FtYXJ0LnBheW1lbnQudjEiKQoFTW9uZXkSDgoGYW1vdW50GAEgASgDEhAKCGN1cnJlbmN5GAIgASgJIosBChpDcmVhdGVQYXltZW50SW50ZW50UmVxdWVzdBIQCghvcmRlcl9pZBgBIAEoCRIXCg9pZGVtcG90ZW5jeV9rZXkYAiABKAkSKgoGYW1vdW50GAMgASgLMhouc2FnYW1hcnQucGF5bWVudC52MS5Nb25leRIWCg5wYXltZW50X21ldGhvZBgEIAEoCSKyAQobQ3JlYXRlUGF5bWVudEludGVudFJlc3BvbnNlEhkKEXBheW1lbnRfaW50ZW50X2lkGAEgASgJEjIKBnN0YXR1cxgCIAEoDjIiLnNhZ2FtYXJ0LnBheW1lbnQudjEuUGF5bWVudFN0YXR1cxIUCgxyZWRpcmVjdF91cmwYAyABKAkSLgoKZXhwaXJlc19hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiLAoYVm9pZFBheW1lbnRJbnRlbnRSZXF1ZXN0EhAKCG9yZGVyX2lkGAEgASgJIk8KGVZvaWRQYXltZW50SW50ZW50UmVzcG9uc2USMgoGc3RhdHVzGAEgASgOMiIuc2FnYW1hcnQucGF5bWVudC52MS5QYXltZW50U3RhdHVzIkEKFFJlZnVuZFBheW1lbnRSZXF1ZXN0EhAKCG9yZGVyX2lkGAEgASgJEhcKD2lkZW1wb3RlbmN5X2tleRgCIAEoCSJeChVSZWZ1bmRQYXltZW50UmVzcG9uc2USEQoJcmVmdW5kX2lkGAEgASgJEjIKBnN0YXR1cxgCIAEoDjIiLnNhZ2FtYXJ0LnBheW1lbnQudjEuUGF5bWVudFN0YXR1cyrEAQoNUGF5bWVudFN0YXR1cxIeChpQQVlNRU5UX1NUQVRVU19VTlNQRUNJRklFRBAAEiIKHlBBWU1FTlRfU1RBVFVTX1JFUVVJUkVTX0FDVElPThABEhwKGFBBWU1FTlRfU1RBVFVTX1NVQ0NFRURFRBACEhkKFVBBWU1FTlRfU1RBVFVTX0ZBSUxFRBADEhkKFVBBWU1FTlRfU1RBVFVTX1ZPSURFRBAEEhsKF1BBWU1FTlRfU1RBVFVTX1JFRlVOREVEEAUy5gIKDlBheW1lbnRTZXJ2aWNlEngKE0NyZWF0ZVBheW1lbnRJbnRlbnQSLy5zYWdhbWFydC5wYXltZW50LnYxLkNyZWF0ZVBheW1lbnRJbnRlbnRSZXF1ZXN0GjAuc2FnYW1hcnQucGF5bWVudC52MS5DcmVhdGVQYXltZW50SW50ZW50UmVzcG9uc2UScgoRVm9pZFBheW1lbnRJbnRlbnQSLS5zYWdhbWFydC5wYXltZW50LnYxLlZvaWRQYXltZW50SW50ZW50UmVxdWVzdBouLnNhZ2FtYXJ0LnBheW1lbnQudjEuVm9pZFBheW1lbnRJbnRlbnRSZXNwb25zZRJmCg1SZWZ1bmRQYXltZW50Eikuc2FnYW1hcnQucGF5bWVudC52MS5SZWZ1bmRQYXltZW50UmVxdWVzdBoqLnNhZ2FtYXJ0LnBheW1lbnQudjEuUmVmdW5kUGF5bWVudFJlc3BvbnNlQnIKIWRldi5zYWdhbWFydC5jb250cmFjdHMucGF5bWVudC52MVABWktnaXRodWIuY29tL3Jpemt5cjk5L3NhZ2FtYXJ0L2NvbnRyYWN0cy9nZW4vZ28vc2FnYW1hcnQvcGF5bWVudC92MTtwYXltZW50djFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("CiFzYWdhbWFydC9wYXltZW50L3YxL3BheW1lbnQucHJvdG8SE3NhZ2FtYXJ0LnBheW1lbnQudjEiKQoFTW9uZXkSDgoGYW1vdW50GAEgASgDEhAKCGN1cnJlbmN5GAIgASgJIrsBChpDcmVhdGVQYXltZW50SW50ZW50UmVxdWVzdBIQCghvcmRlcl9pZBgBIAEoCRIXCg9pZGVtcG90ZW5jeV9rZXkYAiABKAkSKgoGYW1vdW50GAMgASgLMhouc2FnYW1hcnQucGF5bWVudC52MS5Nb25leRIWCg5wYXltZW50X21ldGhvZBgEIAEoCRIuCgpleHBpcmVzX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKyAQobQ3JlYXRlUGF5bWVudEludGVudFJlc3BvbnNlEhkKEXBheW1lbnRfaW50ZW50X2lkGAEgASgJEjIKBnN0YXR1cxgCIAEoDjIiLnNhZ2FtYXJ0LnBheW1lbnQudjEuUGF5bWVudFN0YXR1cxIUCgxyZWRpcmVjdF91cmwYAyABKAkSLgoKZXhwaXJlc19hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiLAoYVm9pZFBheW1lbnRJbnRlbnRSZXF1ZXN0EhAKCG9yZGVyX2lkGAEgASgJIk8KGVZvaWRQYXltZW50SW50ZW50UmVzcG9uc2USMgoGc3RhdHVzGAEgASgOMiIuc2FnYW1hcnQucGF5bWVudC52MS5QYXltZW50U3RhdHVzIkEKFFJlZnVuZFBheW1lbnRSZXF1ZXN0EhAKCG9yZGVyX2lkGAEgASgJEhcKD2lkZW1wb3RlbmN5X2tleRgCIAEoCSJeChVSZWZ1bmRQYXltZW50UmVzcG9uc2USEQoJcmVmdW5kX2lkGAEgASgJEjIKBnN0YXR1cxgCIAEoDjIiLnNhZ2FtYXJ0LnBheW1lbnQudjEuUGF5bWVudFN0YXR1cyIlChFHZXRQYXltZW50UmVxdWVzdBIQCghvcmRlcl9pZBgBIAEoCSKhAgoSR2V0UGF5bWVudFJlc3BvbnNlEhkKEXBheW1lbnRfaW50ZW50X2lkGAEgASgJEjIKBnN0YXR1cxgCIAEoDjIiLnNhZ2FtYXJ0LnBheW1lbnQudjEuUGF5bWVudFN0YXR1cxIqCgZhbW91bnQYAyABKAsyGi5zYWdhbWFydC5wYXltZW50LnYxLk1vbmV5Ei4KCmV4cGlyZXNfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2NhcHR1cmVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtyZWZ1bmRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqxAEKDVBheW1lbnRTdGF0dXMSHgoaUEFZTUVOVF9TVEFUVVNfVU5TUEVDSUZJRUQQABIiCh5QQVlNRU5UX1NUQVRVU19SRVFVSVJFU19BQ1RJT04QARIcChhQQVlNRU5UX1NUQVRVU19TVUNDRUVERUQQAhIZChVQQVlNRU5UX1NUQVRVU19GQUlMRUQQAxIZChVQQVlNRU5UX1NUQVRVU19WT0lERUQQBBIbChdQQVlNRU5UX1NUQVRVU19SRUZVTkRFRBAFMsUDCg5QYXltZW50U2VydmljZRJ4ChNDcmVhdGVQYXltZW50SW50ZW50Ei8uc2FnYW1hcnQucGF5bWVudC52MS5DcmVhdGVQYXltZW50SW50ZW50UmVxdWVzdBowLnNhZ2FtYXJ0LnBheW1lbnQudjEuQ3JlYXRlUGF5bWVudEludGVudFJlc3BvbnNlEnIKEVZvaWRQYXltZW50SW50ZW50Ei0uc2FnYW1hcnQucGF5bWVudC52MS5Wb2lkUGF5bWVudEludGVudFJlcXVlc3QaLi5zYWdhbWFydC5wYXltZW50LnYxLlZvaWRQYXltZW50SW50ZW50UmVzcG9uc2USZgoNUmVmdW5kUGF5bWVudBIpLnNhZ2FtYXJ0LnBheW1lbnQudjEuUmVmdW5kUGF5bWVudFJlcXVlc3QaKi5zYWdhbWFydC5wYXltZW50LnYxLlJlZnVuZFBheW1lbnRSZXNwb25zZRJdCgpHZXRQYXltZW50EiYuc2FnYW1hcnQucGF5bWVudC52MS5HZXRQYXltZW50UmVxdWVzdBonLnNhZ2FtYXJ0LnBheW1lbnQudjEuR2V0UGF5bWVudFJlc3BvbnNlQnIKIWRldi5zYWdhbWFydC5jb250cmFjdHMucGF5bWVudC52MVABWktnaXRodWIuY29tL3Jpemt5cjk5L3NhZ2FtYXJ0L2NvbnRyYWN0cy9nZW4vZ28vc2FnYW1hcnQvcGF5bWVudC92MTtwYXltZW50djFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message sagamart.payment.v1.Money
@@ -60,9 +60,18 @@ export type CreatePaymentIntentRequest = Message<"sagamart.payment.v1.CreatePaym
   amount?: Money | undefined;
 
   /**
+   * "MOCK_CARD" for now.
+   *
    * @generated from field: string payment_method = 4;
    */
   paymentMethod: string;
+
+  /**
+   * When the intent stops accepting payment; Order sets it from the stock reservation (RFC-0002 §4.4).
+   *
+   * @generated from field: google.protobuf.Timestamp expires_at = 5;
+   */
+  expiresAt?: Timestamp | undefined;
 };
 
 /**
@@ -185,6 +194,69 @@ export const RefundPaymentResponseSchema: GenMessage<RefundPaymentResponse> = /*
   messageDesc(file_sagamart_payment_v1_payment, 6);
 
 /**
+ * @generated from message sagamart.payment.v1.GetPaymentRequest
+ */
+export type GetPaymentRequest = Message<"sagamart.payment.v1.GetPaymentRequest"> & {
+  /**
+   * @generated from field: string order_id = 1;
+   */
+  orderId: string;
+};
+
+/**
+ * Describes the message sagamart.payment.v1.GetPaymentRequest.
+ * Use `create(GetPaymentRequestSchema)` to create a new message.
+ */
+export const GetPaymentRequestSchema: GenMessage<GetPaymentRequest> = /*@__PURE__*/
+  messageDesc(file_sagamart_payment_v1_payment, 7);
+
+/**
+ * @generated from message sagamart.payment.v1.GetPaymentResponse
+ */
+export type GetPaymentResponse = Message<"sagamart.payment.v1.GetPaymentResponse"> & {
+  /**
+   * @generated from field: string payment_intent_id = 1;
+   */
+  paymentIntentId: string;
+
+  /**
+   * @generated from field: sagamart.payment.v1.PaymentStatus status = 2;
+   */
+  status: PaymentStatus;
+
+  /**
+   * @generated from field: sagamart.payment.v1.Money amount = 3;
+   */
+  amount?: Money | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 4;
+   */
+  expiresAt?: Timestamp | undefined;
+
+  /**
+   * Set once a capture is recorded.
+   *
+   * @generated from field: google.protobuf.Timestamp captured_at = 5;
+   */
+  capturedAt?: Timestamp | undefined;
+
+  /**
+   * Set once a refund is recorded.
+   *
+   * @generated from field: google.protobuf.Timestamp refunded_at = 6;
+   */
+  refundedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message sagamart.payment.v1.GetPaymentResponse.
+ * Use `create(GetPaymentResponseSchema)` to create a new message.
+ */
+export const GetPaymentResponseSchema: GenMessage<GetPaymentResponse> = /*@__PURE__*/
+  messageDesc(file_sagamart_payment_v1_payment, 8);
+
+/**
  * @generated from enum sagamart.payment.v1.PaymentStatus
  */
 export enum PaymentStatus {
@@ -226,16 +298,25 @@ export const PaymentStatusSchema: GenEnum<PaymentStatus> = /*@__PURE__*/
   enumDesc(file_sagamart_payment_v1_payment, 0);
 
 /**
- * PaymentService takes money exactly once per order. It is called by the Order saga orchestrator.
- * Payment outcomes arrive asynchronously as payment.succeeded / payment.failed events.
- * Draft: semantics are finalised in RFC-0002 (checkout saga).
+ * PaymentService takes money exactly once per order (PRD FR-07). Semantics are defined in RFC-0002.
+ *
+ * Callers: the Order saga orchestrator only, with its service identity (iss "order", identity contract v1.1).
+ * Payment outcomes arrive asynchronously as payment.succeeded / payment.failed events on payment.events.
+ *
+ * Domain errors carry a google.rpc.ErrorInfo detail with domain "payment.sagamart.dev" and one of these reasons:
+ *   INTENT_CONFLICT      ALREADY_EXISTS       the order already has an intent with a different amount
+ *   ALREADY_CAPTURED     FAILED_PRECONDITION  void refused: the provider says the payment went through; refund instead
+ *   NOT_CAPTURED         FAILED_PRECONDITION  refund refused: nothing was captured
+ *   INTENT_NOT_FOUND     NOT_FOUND            no intent for this order
+ *   PROVIDER_UNAVAILABLE UNAVAILABLE          the payment provider didn't answer; safe to retry
+ * Malformed requests return INVALID_ARGUMENT with a google.rpc.BadRequest detail.
  *
  * @generated from service sagamart.payment.v1.PaymentService
  */
 export const PaymentService: GenService<{
   /**
    * CreatePaymentIntent is idempotent on idempotency_key (= order_id, PRD FR-07).
-   * A retry returns the original intent unchanged.
+   * A retry returns the original intent unchanged; a retry with a different amount is INTENT_CONFLICT.
    *
    * @generated from rpc sagamart.payment.v1.PaymentService.CreatePaymentIntent
    */
@@ -246,7 +327,8 @@ export const PaymentService: GenService<{
   },
   /**
    * VoidPaymentIntent cancels an intent that has not been captured. Voiding twice succeeds.
-   * Errors: FAILED_PRECONDITION when the intent is already captured (refund instead).
+   * It asks the provider first: if the payment was in fact captured, Payment records the capture (and publishes
+   * payment.succeeded) and answers ALREADY_CAPTURED, so a late payment is never lost to a void.
    *
    * @generated from rpc sagamart.payment.v1.PaymentService.VoidPaymentIntent
    */
@@ -264,6 +346,16 @@ export const PaymentService: GenService<{
     methodKind: "unary";
     input: typeof RefundPaymentRequestSchema;
     output: typeof RefundPaymentResponseSchema;
+  },
+  /**
+   * GetPayment returns an order's intent and its status (saga reconciliation, admin saga view).
+   *
+   * @generated from rpc sagamart.payment.v1.PaymentService.GetPayment
+   */
+  getPayment: {
+    methodKind: "unary";
+    input: typeof GetPaymentRequestSchema;
+    output: typeof GetPaymentResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_sagamart_payment_v1_payment, 0);

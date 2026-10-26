@@ -22,24 +22,39 @@ const (
 	PaymentService_CreatePaymentIntent_FullMethodName = "/sagamart.payment.v1.PaymentService/CreatePaymentIntent"
 	PaymentService_VoidPaymentIntent_FullMethodName   = "/sagamart.payment.v1.PaymentService/VoidPaymentIntent"
 	PaymentService_RefundPayment_FullMethodName       = "/sagamart.payment.v1.PaymentService/RefundPayment"
+	PaymentService_GetPayment_FullMethodName          = "/sagamart.payment.v1.PaymentService/GetPayment"
 )
 
 // PaymentServiceClient is the client API for PaymentService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// PaymentService takes money exactly once per order. It is called by the Order saga orchestrator.
-// Payment outcomes arrive asynchronously as payment.succeeded / payment.failed events.
-// Draft: semantics are finalised in RFC-0002 (checkout saga).
+// PaymentService takes money exactly once per order (PRD FR-07). Semantics are defined in RFC-0002.
+//
+// Callers: the Order saga orchestrator only, with its service identity (iss "order", identity contract v1.1).
+// Payment outcomes arrive asynchronously as payment.succeeded / payment.failed events on payment.events.
+//
+// Domain errors carry a google.rpc.ErrorInfo detail with domain "payment.sagamart.dev" and one of these reasons:
+//
+//	INTENT_CONFLICT      ALREADY_EXISTS       the order already has an intent with a different amount
+//	ALREADY_CAPTURED     FAILED_PRECONDITION  void refused: the provider says the payment went through; refund instead
+//	NOT_CAPTURED         FAILED_PRECONDITION  refund refused: nothing was captured
+//	INTENT_NOT_FOUND     NOT_FOUND            no intent for this order
+//	PROVIDER_UNAVAILABLE UNAVAILABLE          the payment provider didn't answer; safe to retry
+//
+// Malformed requests return INVALID_ARGUMENT with a google.rpc.BadRequest detail.
 type PaymentServiceClient interface {
 	// CreatePaymentIntent is idempotent on idempotency_key (= order_id, PRD FR-07).
-	// A retry returns the original intent unchanged.
+	// A retry returns the original intent unchanged; a retry with a different amount is INTENT_CONFLICT.
 	CreatePaymentIntent(ctx context.Context, in *CreatePaymentIntentRequest, opts ...grpc.CallOption) (*CreatePaymentIntentResponse, error)
 	// VoidPaymentIntent cancels an intent that has not been captured. Voiding twice succeeds.
-	// Errors: FAILED_PRECONDITION when the intent is already captured (refund instead).
+	// It asks the provider first: if the payment was in fact captured, Payment records the capture (and publishes
+	// payment.succeeded) and answers ALREADY_CAPTURED, so a late payment is never lost to a void.
 	VoidPaymentIntent(ctx context.Context, in *VoidPaymentIntentRequest, opts ...grpc.CallOption) (*VoidPaymentIntentResponse, error)
 	// RefundPayment refunds a captured payment in full. Idempotent on idempotency_key (= order_id + ":refund").
 	RefundPayment(ctx context.Context, in *RefundPaymentRequest, opts ...grpc.CallOption) (*RefundPaymentResponse, error)
+	// GetPayment returns an order's intent and its status (saga reconciliation, admin saga view).
+	GetPayment(ctx context.Context, in *GetPaymentRequest, opts ...grpc.CallOption) (*GetPaymentResponse, error)
 }
 
 type paymentServiceClient struct {
@@ -80,22 +95,46 @@ func (c *paymentServiceClient) RefundPayment(ctx context.Context, in *RefundPaym
 	return out, nil
 }
 
+func (c *paymentServiceClient) GetPayment(ctx context.Context, in *GetPaymentRequest, opts ...grpc.CallOption) (*GetPaymentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPaymentResponse)
+	err := c.cc.Invoke(ctx, PaymentService_GetPayment_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PaymentServiceServer is the server API for PaymentService service.
 // All implementations must embed UnimplementedPaymentServiceServer
 // for forward compatibility.
 //
-// PaymentService takes money exactly once per order. It is called by the Order saga orchestrator.
-// Payment outcomes arrive asynchronously as payment.succeeded / payment.failed events.
-// Draft: semantics are finalised in RFC-0002 (checkout saga).
+// PaymentService takes money exactly once per order (PRD FR-07). Semantics are defined in RFC-0002.
+//
+// Callers: the Order saga orchestrator only, with its service identity (iss "order", identity contract v1.1).
+// Payment outcomes arrive asynchronously as payment.succeeded / payment.failed events on payment.events.
+//
+// Domain errors carry a google.rpc.ErrorInfo detail with domain "payment.sagamart.dev" and one of these reasons:
+//
+//	INTENT_CONFLICT      ALREADY_EXISTS       the order already has an intent with a different amount
+//	ALREADY_CAPTURED     FAILED_PRECONDITION  void refused: the provider says the payment went through; refund instead
+//	NOT_CAPTURED         FAILED_PRECONDITION  refund refused: nothing was captured
+//	INTENT_NOT_FOUND     NOT_FOUND            no intent for this order
+//	PROVIDER_UNAVAILABLE UNAVAILABLE          the payment provider didn't answer; safe to retry
+//
+// Malformed requests return INVALID_ARGUMENT with a google.rpc.BadRequest detail.
 type PaymentServiceServer interface {
 	// CreatePaymentIntent is idempotent on idempotency_key (= order_id, PRD FR-07).
-	// A retry returns the original intent unchanged.
+	// A retry returns the original intent unchanged; a retry with a different amount is INTENT_CONFLICT.
 	CreatePaymentIntent(context.Context, *CreatePaymentIntentRequest) (*CreatePaymentIntentResponse, error)
 	// VoidPaymentIntent cancels an intent that has not been captured. Voiding twice succeeds.
-	// Errors: FAILED_PRECONDITION when the intent is already captured (refund instead).
+	// It asks the provider first: if the payment was in fact captured, Payment records the capture (and publishes
+	// payment.succeeded) and answers ALREADY_CAPTURED, so a late payment is never lost to a void.
 	VoidPaymentIntent(context.Context, *VoidPaymentIntentRequest) (*VoidPaymentIntentResponse, error)
 	// RefundPayment refunds a captured payment in full. Idempotent on idempotency_key (= order_id + ":refund").
 	RefundPayment(context.Context, *RefundPaymentRequest) (*RefundPaymentResponse, error)
+	// GetPayment returns an order's intent and its status (saga reconciliation, admin saga view).
+	GetPayment(context.Context, *GetPaymentRequest) (*GetPaymentResponse, error)
 	mustEmbedUnimplementedPaymentServiceServer()
 }
 
@@ -114,6 +153,9 @@ func (UnimplementedPaymentServiceServer) VoidPaymentIntent(context.Context, *Voi
 }
 func (UnimplementedPaymentServiceServer) RefundPayment(context.Context, *RefundPaymentRequest) (*RefundPaymentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RefundPayment not implemented")
+}
+func (UnimplementedPaymentServiceServer) GetPayment(context.Context, *GetPaymentRequest) (*GetPaymentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPayment not implemented")
 }
 func (UnimplementedPaymentServiceServer) mustEmbedUnimplementedPaymentServiceServer() {}
 func (UnimplementedPaymentServiceServer) testEmbeddedByValue()                        {}
@@ -190,6 +232,24 @@ func _PaymentService_RefundPayment_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PaymentService_GetPayment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPaymentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaymentServiceServer).GetPayment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PaymentService_GetPayment_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaymentServiceServer).GetPayment(ctx, req.(*GetPaymentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PaymentService_ServiceDesc is the grpc.ServiceDesc for PaymentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -208,6 +268,10 @@ var PaymentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RefundPayment",
 			Handler:    _PaymentService_RefundPayment_Handler,
+		},
+		{
+			MethodName: "GetPayment",
+			Handler:    _PaymentService_GetPayment_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -8,20 +8,33 @@ option go_package = "github.com/rizkyr99/sagamart/contracts/gen/go/sagamart/paym
 option java_multiple_files = true;
 option java_package = "dev.sagamart.contracts.payment.v1";
 
-// PaymentService takes money exactly once per order. It is called by the Order saga orchestrator.
-// Payment outcomes arrive asynchronously as payment.succeeded / payment.failed events.
-// Draft: semantics are finalised in RFC-0002 (checkout saga).
+// PaymentService takes money exactly once per order (PRD FR-07). Semantics are defined in RFC-0002.
+//
+// Callers: the Order saga orchestrator only, with its service identity (iss "order", identity contract v1.1).
+// Payment outcomes arrive asynchronously as payment.succeeded / payment.failed events on payment.events.
+//
+// Domain errors carry a google.rpc.ErrorInfo detail with domain "payment.sagamart.dev" and one of these reasons:
+//   INTENT_CONFLICT      ALREADY_EXISTS       the order already has an intent with a different amount
+//   ALREADY_CAPTURED     FAILED_PRECONDITION  void refused: the provider says the payment went through; refund instead
+//   NOT_CAPTURED         FAILED_PRECONDITION  refund refused: nothing was captured
+//   INTENT_NOT_FOUND     NOT_FOUND            no intent for this order
+//   PROVIDER_UNAVAILABLE UNAVAILABLE          the payment provider didn't answer; safe to retry
+// Malformed requests return INVALID_ARGUMENT with a google.rpc.BadRequest detail.
 service PaymentService {
   // CreatePaymentIntent is idempotent on idempotency_key (= order_id, PRD FR-07).
-  // A retry returns the original intent unchanged.
+  // A retry returns the original intent unchanged; a retry with a different amount is INTENT_CONFLICT.
   rpc CreatePaymentIntent(CreatePaymentIntentRequest) returns (CreatePaymentIntentResponse);
 
   // VoidPaymentIntent cancels an intent that has not been captured. Voiding twice succeeds.
-  // Errors: FAILED_PRECONDITION when the intent is already captured (refund instead).
+  // It asks the provider first: if the payment was in fact captured, Payment records the capture (and publishes
+  // payment.succeeded) and answers ALREADY_CAPTURED, so a late payment is never lost to a void.
   rpc VoidPaymentIntent(VoidPaymentIntentRequest) returns (VoidPaymentIntentResponse);
 
   // RefundPayment refunds a captured payment in full. Idempotent on idempotency_key (= order_id + ":refund").
   rpc RefundPayment(RefundPaymentRequest) returns (RefundPaymentResponse);
+
+  // GetPayment returns an order's intent and its status (saga reconciliation, admin saga view).
+  rpc GetPayment(GetPaymentRequest) returns (GetPaymentResponse);
 }
 
 message Money {
@@ -35,7 +48,10 @@ message CreatePaymentIntentRequest {
   string order_id = 1;
   string idempotency_key = 2;
   Money amount = 3;
+  // "MOCK_CARD" for now.
   string payment_method = 4;
+  // When the intent stops accepting payment; Order sets it from the stock reservation (RFC-0002 §4.4).
+  google.protobuf.Timestamp expires_at = 5;
 }
 
 message CreatePaymentIntentResponse {
@@ -71,4 +87,19 @@ enum PaymentStatus {
   PAYMENT_STATUS_FAILED = 3;
   PAYMENT_STATUS_VOIDED = 4;
   PAYMENT_STATUS_REFUNDED = 5;
+}
+
+message GetPaymentRequest {
+  string order_id = 1;
+}
+
+message GetPaymentResponse {
+  string payment_intent_id = 1;
+  PaymentStatus status = 2;
+  Money amount = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  // Set once a capture is recorded.
+  google.protobuf.Timestamp captured_at = 5;
+  // Set once a refund is recorded.
+  google.protobuf.Timestamp refunded_at = 6;
 }

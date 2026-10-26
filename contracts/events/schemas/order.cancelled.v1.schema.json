@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sagamart.dev/schemas/events/schemas/order.cancelled.v1.schema.json",
+  "title": "order.cancelled/v1",
+  "description": "An order was cancelled and its stock released, with any capture refunded (RFC-0002 \u00a74.4). Published once per order, on the first cancellation. Carries no personal data.",
+  "allOf": [
+    {
+      "$ref": "../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "order.cancelled"
+    },
+    "source": {
+      "const": "order"
+    },
+    "dataschema": {
+      "const": "order.cancelled/v1"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "orderId",
+        "buyerId",
+        "reason",
+        "cancelledAt"
+      ],
+      "properties": {
+        "orderId": {
+          "description": "Also the event subject.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "buyerId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "INSUFFICIENT_STOCK",
+            "PAYMENT_FAILED",
+            "PAYMENT_TIMEOUT",
+            "STOCK_UNAVAILABLE",
+            "PAYMENT_UNAVAILABLE"
+          ]
+        },
+        "cancelledAt": {
+          "description": "When the saga reached CANCELLED, UTC.",
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

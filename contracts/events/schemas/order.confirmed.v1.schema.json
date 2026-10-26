@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sagamart.dev/schemas/events/schemas/order.confirmed.v1.schema.json",
+  "title": "order.confirmed/v1",
+  "description": "An order was paid and its stock committed: the checkout saga completed (RFC-0002 \u00a74.4). For the Events stage (live status, notifications). Carries no personal data.",
+  "allOf": [
+    {
+      "$ref": "../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "order.confirmed"
+    },
+    "source": {
+      "const": "order"
+    },
+    "dataschema": {
+      "const": "order.confirmed/v1"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "orderId",
+        "buyerId",
+        "total",
+        "lines",
+        "confirmedAt"
+      ],
+      "properties": {
+        "orderId": {
+          "description": "Also the event subject.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "buyerId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "total": {
+          "type": "object",
+          "required": [
+            "amount",
+            "currency"
+          ],
+          "properties": {
+            "amount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "currency": {
+              "const": "IDR"
+            }
+          },
+          "additionalProperties": false
+        },
+        "lines": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "required": [
+              "sku",
+              "quantity",
+              "unitPrice"
+            ],
+            "properties": {
+              "sku": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "unitPrice": {
+                "type": "object",
+                "required": [
+                  "amount",
+                  "currency"
+                ],
+                "properties": {
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "currency": {
+                    "const": "IDR"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "confirmedAt": {
+          "description": "When the saga completed, UTC.",
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
