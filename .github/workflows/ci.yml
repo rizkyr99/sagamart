@@ -21,6 +21,7 @@ jobs:
       docs: ${{ steps.filter.outputs.docs }}
       contracts: ${{ steps.filter.outputs.contracts }}
       inventory: ${{ steps.filter.outputs.inventory }}
+      order: ${{ steps.filter.outputs.order }}
       node: ${{ steps.filter.outputs.node }}
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +59,10 @@ jobs:
               - "services/inventory/**"
               - "contracts/gen/go/**"
               - ".golangci.yml"
+            order:
+              - *workflow
+              - "services/order/**"
+              - "contracts/proto/**" # Java is generated from it at build time
 
   # ---- Docs ----
 
@@ -186,6 +191,29 @@ jobs:
         working-directory: .
         run: docker build -f services/inventory/Dockerfile -t sagamart-inventory:ci .
 
+  order:
+    needs: changes
+    if: needs.changes.outputs.order == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/order
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false # this job runs third-party code, which never needs the token
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: services/order/pom.xml
+      - name: Format, lint, unit and integration tests (Spotless, Checkstyle, Testcontainers)
+        run: ./mvnw -B -ntp verify
+      - name: Image builds
+        working-directory: .
+        run: docker build -f services/order/Dockerfile -t sagamart-order:ci .
+
   node:
     needs: changes
     if: needs.changes.outputs.node == 'true'
@@ -221,7 +249,7 @@ jobs:
 
   ci:
     if: always()
-    needs: [changes, markdown, links, proto, openapi, event-schemas, node, inventory]
+    needs: [changes, markdown, links, proto, openapi, event-schemas, node, inventory, order]
     runs-on: ubuntu-latest
     steps:
       - name: Every job that ran passed

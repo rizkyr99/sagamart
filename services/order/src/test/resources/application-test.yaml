@@ -1,0 +1,5 @@
+# Tests run without a collector.
+management:
+  tracing:
+    export:
+      enabled: false
