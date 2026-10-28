@@ -8,17 +8,23 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.context.properties.bind.validation.BindValidationException;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.validation.FieldError;
 
 /** Conventions §10: a missing or malformed setting stops the service at startup, naming it. */
+@ExtendWith(OutputCaptureExtension.class)
 class ConfigValidationTests {
 
   private static final Map<String, Object> VALID =
@@ -34,7 +40,6 @@ class ConfigValidationTests {
         Arguments.of("order.env", "staging", "order.env"),
         Arguments.of("order.env", "PROD", "order.env"),
         Arguments.of("order.db.url", "", "order.db.url"),
-        Arguments.of("order.db.url", "postgres://localhost/order", "order.db.url"),
         Arguments.of("order.db.user", "", "order.db.user"),
         Arguments.of("order.db.password", "", "order.db.password"));
   }
@@ -57,14 +62,43 @@ class ConfigValidationTests {
             });
   }
 
-  @ParameterizedTest(name = "{0}=\"{1}\"")
-  @MethodSource("invalid")
-  void neverLogsTheDatabasePassword(String key, String value, String named) {
+  @Test
+  void refusesAUrlThatIsNotJdbcPostgres() {
     Map<String, Object> props = new HashMap<>(VALID);
-    props.put("order.db.password", "s3cret-pw");
+    props.put("order.db.url", "postgres://localhost/order");
+    assertThatThrownBy(() -> start(props))
+        .satisfies(
+            e ->
+                assertThat(NestedExceptionUtils.getMostSpecificCause(e))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("ORDER_DB_URL")
+                    .hasMessageContaining("jdbc:postgresql://"));
+  }
+
+  /** Every way startup can fail on config, including a bad URL that carries credentials. */
+  static Stream<Arguments> failuresWithAPassword() {
+    String password = "pw-" + UUID.randomUUID(); // generated: no secret-looking literal in the code
+    return Stream.concat(
+        invalid().map(a -> Arguments.of(a.get()[0], a.get()[1], password)),
+        Stream.of(
+            Arguments.of(
+                "order.db.url", "postgres://order:" + password + "@localhost/order", password),
+            Arguments.of(
+                "order.db.url",
+                "jdbcpostgresql://localhost/order?password=" + password,
+                password)));
+  }
+
+  @ParameterizedTest(name = "{0}=\"{1}\"")
+  @MethodSource("failuresWithAPassword")
+  void neverLogsTheDatabasePassword(
+      String key, String value, String password, CapturedOutput output) {
+    Map<String, Object> props = new HashMap<>(VALID);
+    props.put("order.db.password", password);
     props.put(key, value);
     assertThatThrownBy(() -> start(props))
-        .satisfies(e -> assertThat(stackTrace(e)).doesNotContain("s3cret-pw"));
+        .satisfies(e -> assertThat(stackTrace(e)).doesNotContain(password));
+    assertThat(output.getAll()).doesNotContain(password);
   }
 
   /** As command-line arguments, which outrank application.yaml like the environment does. */

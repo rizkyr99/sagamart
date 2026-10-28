@@ -22,11 +22,10 @@ public record OrderProperties(
     @Valid @NotNull Db db) {
 
   public record Db(
-      @NotBlank
-          @Pattern(regexp = "jdbc:postgresql://.+", message = "must be a jdbc:postgresql:// URL")
-          String url,
-      @NotBlank String user,
-      @NotBlank String password) {
+      // The scheme is checked in DatabaseConfig: a bind failure prints the value, and a URL may
+      // carry
+      // credentials.
+      @NotBlank String url, @NotBlank String user, @NotBlank String password) {
 
     @Override
     public String toString() {

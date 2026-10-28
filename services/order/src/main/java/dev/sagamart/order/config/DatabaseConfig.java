@@ -15,6 +15,10 @@ class DatabaseConfig {
 
   @Bean
   DataSource dataSource(OrderProperties properties) {
+    if (!properties.db().url().startsWith("jdbc:postgresql://")) {
+      // Never the value itself: a malformed URL may still hold a password.
+      throw new IllegalStateException("ORDER_DB_URL must be a jdbc:postgresql:// URL");
+    }
     HikariDataSource dataSource =
         DataSourceBuilder.create()
             .type(HikariDataSource.class)
