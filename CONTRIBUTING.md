@@ -11,7 +11,7 @@ The full process is in [docs/engineering/development-process.md](docs/engineerin
 | Go | 1.25+ | Inventory, Payment, Event workers, mock provider, invariant checker |
 | Node.js | 24.11+ (`.node-version`) | Gateway, Catalog + Cart, web app |
 | pnpm | 10.34.7, from `packageManager` in `package.json` | The Node workspace; any pnpm 9.7+ or corepack switches to it automatically |
-| Java | 21+ | Order service |
+| Java | 25 | Order service (Maven comes through `./mvnw`; no install) |
 
 Protobuf tooling (`buf`) runs in Docker through `make contracts-lint`, so it does not need a local install.
 
@@ -57,6 +57,7 @@ Run `make identity-keys` once: it writes the local Ed25519 key pair the gateway 
 | Inventory — HTTP (probes, metrics) / gRPC | 8110 / 9110 |
 | Catalog — internal API, probes, metrics | 8120 |
 | Gateway — public API (from #30) | 8100 |
+| Order — HTTP (probes, metrics) / gRPC | 8140 / 9140 |
 
 ## Workflow
 
