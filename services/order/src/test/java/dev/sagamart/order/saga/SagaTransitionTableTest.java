@@ -94,7 +94,8 @@ class SagaTransitionTableTest {
           REFUNDING_AFTER_CANCEL,
           REFUNDING_AFTER_CANCEL_REFUNDED,
           CANCELLED,
-          STUCK);
+          STUCK,
+          new NeedsAttention(COMMITTING));
 
   static final List<SagaEvent> EVENTS =
       List.of(
@@ -216,8 +217,8 @@ class SagaTransitionTableTest {
         row(
             COMMITTING,
             new RetriesExhausted(),
-            new Refunding(STOCK_UNAVAILABLE, false, false),
-            "money must not stay taken for an unconfirmed order"));
+            new NeedsAttention(COMMITTING),
+            "the commit may have happened: never refund a sale; an operator looks (still PAID)"));
     rows.add(row(CANCELLING_TO_VOID, new IntentVoided(), CANCELLING_VOIDED, "then release"));
     rows.add(
         row(

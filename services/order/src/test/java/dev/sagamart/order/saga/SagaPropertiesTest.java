@@ -201,6 +201,11 @@ class SagaPropertiesTest {
               yield new IntentVoided();
             }
             case ReleaseReservation _ -> {
+              // Inventory refuses to release a committed reservation (RESERVATION_COMMITTED): the
+              // saga must never ask, or it has sold stock for an order it is cancelling.
+              assertThat(world.stockCommitted)
+                  .as("never releases a committed reservation")
+                  .isFalse();
               world.stockHeld &= !effect;
               yield new ReservationReleased();
             }
@@ -246,6 +251,7 @@ class SagaPropertiesTest {
     if (run.state instanceof Cancelled) {
       assertThat(run.world.holdsMoney()).as("cancelled never keeps the money").isFalse();
       assertThat(run.world.stockHeld).as("cancelled never keeps stock reserved").isFalse();
+      assertThat(run.world.stockCommitted).as("cancelled never sold the stock").isFalse();
     }
   }
 

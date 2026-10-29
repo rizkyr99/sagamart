@@ -82,9 +82,14 @@ public final class Saga {
       case CommittingStock _ ->
           switch (event) {
             case StockCommitted _ -> to(state, event, new Completed(), new OrderConfirmed());
-            // Money must not stay taken for an unconfirmed order.
-            case ReservationNotFound _, RetriesExhausted _ ->
+            // Definitely not committed (expired or released): money must not stay taken.
+            case ReservationNotFound _ ->
                 to(state, event, new Refunding(CancelReason.STOCK_UNAVAILABLE, false, false));
+            // The commit may have taken effect with its reply lost, and Inventory won't release a
+            // committed reservation: refunding could sell stock for a cancelled order. The runner
+            // retries commit on the compensation budget, since its answer becomes definitive;
+            // giving up means an operator decides, with the order still PAID.
+            case RetriesExhausted _ -> to(state, event, new NeedsAttention(state));
             default -> ignored(state, event);
           };
       case Cancelling s ->

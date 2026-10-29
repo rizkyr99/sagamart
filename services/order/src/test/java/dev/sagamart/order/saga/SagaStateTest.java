@@ -55,6 +55,8 @@ class SagaStateTest {
         Arguments.of(CANCELLED, OrderStatus.CANCELLED, null),
         // Unchanged: the status of the state it got stuck in.
         Arguments.of(STUCK, OrderStatus.CANCELLED, null),
+        // A commit that gave up: the buyer has paid, and an operator decides.
+        Arguments.of(new NeedsAttention(COMMITTING), OrderStatus.PAID, null),
         Arguments.of(new NeedsAttention(REFUNDING_AFTER_CANCEL), OrderStatus.CANCELLED, null));
   }
 

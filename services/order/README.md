@@ -57,7 +57,7 @@ Environment variables, bound to `OrderProperties` and validated at startup: a mi
 - **Unlisted events change nothing.** An event the table doesn't list for a state (a duplicate, a late result, an event overtaken by another) returns `applied = false`, and the saga stays as it was.
 - **Tests:**
   - `SagaTransitionTableTest` holds the table as data: one test per row, plus a check that every other (state, event) pair is ignored, so code and table can't drift.
-  - `SagaPropertiesTest` (jqwik) drives a model of Inventory, Payment, the buyer and a redelivering, reordering event bus with random moves. It asserts that every history ends terminal or `NEEDS_ATTENTION`, never confirms without a commit, never ends `CANCELLED` holding money or stock, and announces each outcome once.
+  - `SagaPropertiesTest` (jqwik) drives a model of Inventory, Payment, the buyer and a redelivering, reordering event bus with random moves. It asserts that every history ends terminal or `NEEDS_ATTENTION`, never confirms without a commit, never ends `CANCELLED` holding money or stock or having sold the stock, never asks Inventory to release a committed reservation, and announces each outcome once.
 
 ## Schema
 
