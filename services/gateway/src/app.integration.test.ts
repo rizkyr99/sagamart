@@ -254,8 +254,12 @@ describe('rate limiting', () => {
     // which a busy CI runner needs (at 2/s, a refill after 500 ms let the fourth through).
     const limited = await start({ GATEWAY_RATE_LIMIT_PER_SECOND: '1', GATEWAY_RATE_LIMIT_BURST: '3' });
     const token = await bearer('admin', admin);
-    for (let i = 0; i < 3; i++)
-      await request(limited).get('/v1/test/admin').set('authorization', token).expect(200);
+    // Concurrently, so the burst takes about one round trip, well inside the 1 s refill.
+    await Promise.all(
+      Array.from({ length: 3 }, () =>
+        request(limited).get('/v1/test/admin').set('authorization', token).expect(200),
+      ),
+    );
     const res = await request(limited).get('/v1/test/admin').set('authorization', token).expect(429);
     expect(contract.errors('GET', '/v1/products', 429, res.body)).toEqual([]);
     expect(res.body).toMatchObject({ code: 'RATE_LIMITED' });
