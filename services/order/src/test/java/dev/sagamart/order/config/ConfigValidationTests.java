@@ -101,8 +101,36 @@ class ConfigValidationTests {
     assertThat(output.getAll()).doesNotContain(password);
   }
 
+  /** Credentials belong in ORDER_DB_USER and ORDER_DB_PASSWORD, where they are never logged. */
+  static Stream<String> urlsWithCredentials() {
+    return Stream.of(
+        "jdbc:postgresql://localhost:1/order?password=%s",
+        "jdbc:postgresql://localhost:1/order?user=order&password=%s",
+        "jdbc:postgresql://localhost:1/order?sslpassword=%s",
+        "jdbc:postgresql://order:%s@localhost:1/order");
+  }
+
+  @ParameterizedTest
+  @MethodSource("urlsWithCredentials")
+  void refusesCredentialsInTheUrlWithoutPrintingThem(String template, CapturedOutput output) {
+    String secret = "pw-" + UUID.randomUUID();
+    Map<String, Object> props = new HashMap<>(VALID);
+    props.put("order.db.url", template.formatted(secret));
+    // With migrations on, as in local: the first connection is where pgJDBC would print the URL.
+    assertThatThrownBy(() -> start(props, "spring.flyway.enabled=true"))
+        .satisfies(
+            e -> {
+              assertThat(NestedExceptionUtils.getMostSpecificCause(e))
+                  .isInstanceOf(IllegalStateException.class)
+                  .hasMessageContaining("ORDER_DB_URL")
+                  .hasMessageContaining("ORDER_DB_PASSWORD");
+              assertThat(stackTrace(e)).doesNotContain(secret);
+            });
+    assertThat(output.getAll()).doesNotContain(secret);
+  }
+
   /** As command-line arguments, which outrank application.yaml like the environment does. */
-  private static void start(Map<String, Object> props) {
+  private static void start(Map<String, Object> props, String... overrides) {
     String[] args =
         props.entrySet().stream()
             .map(e -> "--" + e.getKey() + "=" + e.getValue())
@@ -110,7 +138,9 @@ class ConfigValidationTests {
     new SpringApplicationBuilder(OrderApplication.class)
         .web(WebApplicationType.NONE)
         .properties("spring.grpc.server.port=0", "spring.flyway.enabled=false")
-        .run(args)
+        .run(
+            Stream.concat(Stream.of(args), Stream.of(overrides).map(o -> "--" + o))
+                .toArray(String[]::new))
         .close();
   }
 
