@@ -43,7 +43,8 @@
             "PAYMENT_FAILED",
             "PAYMENT_TIMEOUT",
             "STOCK_UNAVAILABLE",
-            "PAYMENT_UNAVAILABLE"
+            "PAYMENT_UNAVAILABLE",
+            "INVENTORY_UNAVAILABLE"
           ]
         },
         "cancelledAt": {

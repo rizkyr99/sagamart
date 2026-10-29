@@ -292,17 +292,17 @@ States and the order status each maps to (system design §5, refined with `CREAT
 |---|---|---|---|
 | `RESERVING_STOCK` | `StockReserved` | `CREATING_PAYMENT` | Stores `reservation_expires_at` from Inventory's reply |
 | `RESERVING_STOCK` | `InsufficientStock` | `CANCELLED` | `reason=INSUFFICIENT_STOCK`; nothing to compensate |
-| `RESERVING_STOCK` | retries exhausted | `CANCELLING` | Release is a no-op if nothing was reserved |
+| `RESERVING_STOCK` | retries exhausted | `CANCELLING` | `reason=INVENTORY_UNAVAILABLE`; release only (no intent can exist), a no-op if nothing was reserved |
 | `CREATING_PAYMENT` | `IntentCreated` | `AWAITING_PAYMENT` | Stores `payment_url`; `payment_deadline = min(reservation_expires_at − 2m, intent expires_at)`, absolute times from the replies, so a slow step can't push the deadline past the reservation |
-| `CREATING_PAYMENT` | retries exhausted | `CANCELLING` | `reason=PAYMENT_UNAVAILABLE` |
+| `CREATING_PAYMENT` | retries exhausted | `CANCELLING` | `reason=PAYMENT_UNAVAILABLE`. Void anyway: the intent may exist though its reply was lost |
 | `CREATING_PAYMENT` | `payment.succeeded` † | `COMMITTING_STOCK` | The buyer paid before the intent's reply was recorded |
 | `AWAITING_PAYMENT` | `payment.succeeded` | `COMMITTING_STOCK` | |
 | `AWAITING_PAYMENT` | `payment.failed` | `CANCELLING` | `reason=PAYMENT_FAILED` |
 | `AWAITING_PAYMENT` | `PaymentDeadlinePassed` | `CANCELLING` | `reason=PAYMENT_TIMEOUT`; void first |
-| `AWAITING_PAYMENT` | `inventory.reservation.expired` † | `CANCELLING` | Should not happen (deadline 8m < TTL 10m); handled anyway |
+| `AWAITING_PAYMENT` | `inventory.reservation.expired` † | `CANCELLING` | `reason=STOCK_UNAVAILABLE`. Should not happen (deadline 8m < TTL 10m); handled anyway |
 | `COMMITTING_STOCK` | `StockCommitted` | `COMPLETED` | |
 | `COMMITTING_STOCK` | `ReservationNotFound` | `REFUNDING` | `reason=STOCK_UNAVAILABLE` (system design §5, third flow) |
-| `COMMITTING_STOCK` | retries exhausted | `REFUNDING` | Money must not stay taken for an unconfirmed order |
+| `COMMITTING_STOCK` | retries exhausted | `REFUNDING` | `reason=STOCK_UNAVAILABLE`. Money must not stay taken for an unconfirmed order |
 | `CANCELLING` | `IntentVoided` | `CANCELLING` | Then release |
 | `CANCELLING` | `AlreadyCaptured` † | `COMMITTING_STOCK` | The buyer paid as the deadline passed. Void runs before release, so the reservation is normally still held: try to commit it. If it expired, `ReservationNotFound` takes the existing route to `REFUNDING`. No reservation state needs remembering. |
 | `CANCELLING` | `ReservationReleased` | `CANCELLED` | |
@@ -539,3 +539,4 @@ Nothing in Stage 1's services changes behaviour, except Inventory's saga RPCs st
 | 2026-10-26 | Shipping-address retention deferred to Core complete | Decided with real auth and buyer accounts |
 | 2026-10-26 | Accepted | Self-review by the author; rollout §10 became issues #57–#66 in the Checkout saga milestone |
 | 2026-10-26 | Revised after automated review (7 findings, all accepted) | CodeRabbit reviewed after acceptance. The changes: **a claim lease** (`claimed_until`, 30 s, also taken by inline steps), so no two runners execute one step concurrently. The **idempotency lookup before cart and price checks**, with the hash over the client's body, so a retry after a lost `202` replays the order. The **payment deadline anchored to the reservation and intent expiries**, not to when Order recorded the intent. **`order.cancelled` published once** per order. **Inline calls capped by the remaining inline budget.** **`AlreadyCaptured` always tries to commit**, with `ReservationNotFound` routing to the refund. System design's SSE step labelled as the Events-stage target. |
+| 2026-10-29 | Cancel reason `INVENTORY_UNAVAILABLE` added (additive) | `RESERVING_STOCK` exhausting its retries had no fitting reason; it is the twin of `PAYMENT_UNAVAILABLE`. The table now names the reason on every row that cancels or refunds. Found while implementing #59 |
