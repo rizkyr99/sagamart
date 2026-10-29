@@ -250,24 +250,18 @@ describe('internal calls', () => {
 
 describe('rate limiting', () => {
   it('allows a burst, then 429 with Retry-After, then refills', async () => {
-    const limited = await start({ GATEWAY_RATE_LIMIT_PER_SECOND: '2', GATEWAY_RATE_LIMIT_BURST: '3' });
+    // 1 token/s and one signed token for the burst: four requests get a full second before a refill,
+    // which a busy CI runner needs (at 2/s, a refill after 500 ms let the fourth through).
+    const limited = await start({ GATEWAY_RATE_LIMIT_PER_SECOND: '1', GATEWAY_RATE_LIMIT_BURST: '3' });
+    const token = await bearer('admin', admin);
     for (let i = 0; i < 3; i++)
-      await request(limited)
-        .get('/v1/test/admin')
-        .set('authorization', await bearer('admin', admin))
-        .expect(200);
-    const res = await request(limited)
-      .get('/v1/test/admin')
-      .set('authorization', await bearer('admin', admin))
-      .expect(429);
+      await request(limited).get('/v1/test/admin').set('authorization', token).expect(200);
+    const res = await request(limited).get('/v1/test/admin').set('authorization', token).expect(429);
     expect(contract.errors('GET', '/v1/products', 429, res.body)).toEqual([]);
     expect(res.body).toMatchObject({ code: 'RATE_LIMITED' });
     expect(res.headers['retry-after']).toBe('1');
-    await new Promise((resolve) => setTimeout(resolve, 600)); // 2 tokens/s: one is back after 500 ms
-    await request(limited)
-      .get('/v1/test/admin')
-      .set('authorization', await bearer('admin', admin))
-      .expect(200);
+    await new Promise((resolve) => setTimeout(resolve, 1100)); // 1 token/s: one is back after 1 s
+    await request(limited).get('/v1/test/admin').set('authorization', token).expect(200);
   });
 
   it('keeps separate buckets per user and per IP', async () => {
