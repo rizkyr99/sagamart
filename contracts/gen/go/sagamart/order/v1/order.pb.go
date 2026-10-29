@@ -88,10 +88,12 @@ const (
 	CancelReason_CANCEL_REASON_INSUFFICIENT_STOCK CancelReason = 1
 	CancelReason_CANCEL_REASON_PAYMENT_FAILED     CancelReason = 2
 	CancelReason_CANCEL_REASON_PAYMENT_TIMEOUT    CancelReason = 3
-	// Paid, but the reservation could no longer be committed; the payment is refunded.
+	// The reservation was lost (it expired) or could not be committed; any payment is refunded.
 	CancelReason_CANCEL_REASON_STOCK_UNAVAILABLE CancelReason = 4
 	// Payment couldn't be started after the retry budget.
 	CancelReason_CANCEL_REASON_PAYMENT_UNAVAILABLE CancelReason = 5
+	// Stock couldn't be reserved after the retry budget (Inventory unreachable); nothing was charged.
+	CancelReason_CANCEL_REASON_INVENTORY_UNAVAILABLE CancelReason = 6
 )
 
 // Enum value maps for CancelReason.
@@ -103,14 +105,16 @@ var (
 		3: "CANCEL_REASON_PAYMENT_TIMEOUT",
 		4: "CANCEL_REASON_STOCK_UNAVAILABLE",
 		5: "CANCEL_REASON_PAYMENT_UNAVAILABLE",
+		6: "CANCEL_REASON_INVENTORY_UNAVAILABLE",
 	}
 	CancelReason_value = map[string]int32{
-		"CANCEL_REASON_UNSPECIFIED":         0,
-		"CANCEL_REASON_INSUFFICIENT_STOCK":  1,
-		"CANCEL_REASON_PAYMENT_FAILED":      2,
-		"CANCEL_REASON_PAYMENT_TIMEOUT":     3,
-		"CANCEL_REASON_STOCK_UNAVAILABLE":   4,
-		"CANCEL_REASON_PAYMENT_UNAVAILABLE": 5,
+		"CANCEL_REASON_UNSPECIFIED":           0,
+		"CANCEL_REASON_INSUFFICIENT_STOCK":    1,
+		"CANCEL_REASON_PAYMENT_FAILED":        2,
+		"CANCEL_REASON_PAYMENT_TIMEOUT":       3,
+		"CANCEL_REASON_STOCK_UNAVAILABLE":     4,
+		"CANCEL_REASON_PAYMENT_UNAVAILABLE":   5,
+		"CANCEL_REASON_INVENTORY_UNAVAILABLE": 6,
 	}
 )
 
@@ -1514,14 +1518,15 @@ const file_sagamart_order_v1_order_proto_rawDesc = "" +
 	"\x1dORDER_STATUS_AWAITING_PAYMENT\x10\x02\x12\x15\n" +
 	"\x11ORDER_STATUS_PAID\x10\x03\x12\x1a\n" +
 	"\x16ORDER_STATUS_CONFIRMED\x10\x04\x12\x1a\n" +
-	"\x16ORDER_STATUS_CANCELLED\x10\x05*\xe4\x01\n" +
+	"\x16ORDER_STATUS_CANCELLED\x10\x05*\x8d\x02\n" +
 	"\fCancelReason\x12\x1d\n" +
 	"\x19CANCEL_REASON_UNSPECIFIED\x10\x00\x12$\n" +
 	" CANCEL_REASON_INSUFFICIENT_STOCK\x10\x01\x12 \n" +
 	"\x1cCANCEL_REASON_PAYMENT_FAILED\x10\x02\x12!\n" +
 	"\x1dCANCEL_REASON_PAYMENT_TIMEOUT\x10\x03\x12#\n" +
 	"\x1fCANCEL_REASON_STOCK_UNAVAILABLE\x10\x04\x12%\n" +
-	"!CANCEL_REASON_PAYMENT_UNAVAILABLE\x10\x05*\xb3\x02\n" +
+	"!CANCEL_REASON_PAYMENT_UNAVAILABLE\x10\x05\x12'\n" +
+	"#CANCEL_REASON_INVENTORY_UNAVAILABLE\x10\x06*\xb3\x02\n" +
 	"\tSagaState\x12\x1a\n" +
 	"\x16SAGA_STATE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aSAGA_STATE_RESERVING_STOCK\x10\x01\x12\x1f\n" +

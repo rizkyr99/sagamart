@@ -2,7 +2,7 @@
 
 Java service that owns orders and runs the checkout saga: it reserves stock, takes payment and confirms or cancels, so that an order is never lost and never charged twice. Design: [RFC-0002](../../docs/rfc/0002-checkout-saga.md). Contract: [`sagamart.order.v1`](../../contracts/proto/sagamart/order/v1/order.proto).
 
-> **Status:** skeleton (#58). The service starts, migrates its schema and serves health, metrics and gRPC, but every `OrderService` RPC answers `UNIMPLEMENTED`. Next: the saga state machine (#59), then persistence and the runner (#60).
+> **Status:** skeleton (#58) and the saga state machine (#59). The service starts, migrates its schema and serves health, metrics and gRPC, but every `OrderService` RPC answers `UNIMPLEMENTED`. Next: persistence and the runner (#60).
 
 ## Run it
 
@@ -48,6 +48,16 @@ Environment variables, bound to `OrderProperties` and validated at startup: a mi
 - **Logs:** one JSON object per line with the conventions §7 fields (`ts`, `level`, `service`, `env`, `version`, `msg`, `trace_id`, `span_id`), written by `OrderLogFormatter`. Add domain IDs as fields with SLF4J's fluent API: `log.atInfo().addKeyValue("order_id", id).log("order confirmed")`.
 - **Traces:** every gRPC call and HTTP request is a span, exported over OTLP. Probes and scrapes (`/healthz`, `/readyz`, `/metrics`) are not observed, so they neither bury real traces nor skew request metrics.
 - **Metrics:** Prometheus at `/metrics`: `grpc_server_*` and `http_server_requests_seconds` histograms, JVM, and the `hikaricp_*` pool. The saga metrics (RFC-0002 §6) arrive with the saga.
+
+## The saga state machine
+
+[`dev.sagamart.order.saga`](src/main/java/dev/sagamart/order/saga) is RFC-0002 §4.4 as code: `Saga.apply(SagaState, SagaEvent)` returns a `Transition` (the next state, and the `order.*` events to publish). It is pure: no I/O and no clock. The runner and the consumers (#60, #64) persist and apply it.
+
+- **States** are sealed records that carry only what their rules need. For example, `Cancelling` knows whether an intent may exist and whether it was voided. Each state derives its `pendingCommand()`, so a state and its next call are persisted together.
+- **Unlisted events change nothing.** An event the table doesn't list for a state (a duplicate, a late result, an event overtaken by another) returns `applied = false`, and the saga stays as it was.
+- **Tests:**
+  - `SagaTransitionTableTest` holds the table as data: one test per row, plus a check that every other (state, event) pair is ignored, so code and table can't drift.
+  - `SagaPropertiesTest` (jqwik) drives a model of Inventory, Payment, the buyer and a redelivering, reordering event bus with random moves. It asserts that every history ends terminal or `NEEDS_ATTENTION`, never confirms without a commit, never ends `CANCELLED` holding money or stock or having sold the stock, never asks Inventory to release a committed reservation, and announces each outcome once.
 
 ## Schema
 

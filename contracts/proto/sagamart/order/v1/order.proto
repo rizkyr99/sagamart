@@ -159,10 +159,12 @@ enum CancelReason {
   CANCEL_REASON_INSUFFICIENT_STOCK = 1;
   CANCEL_REASON_PAYMENT_FAILED = 2;
   CANCEL_REASON_PAYMENT_TIMEOUT = 3;
-  // Paid, but the reservation could no longer be committed; the payment is refunded.
+  // The reservation was lost (it expired) or could not be committed; any payment is refunded.
   CANCEL_REASON_STOCK_UNAVAILABLE = 4;
   // Payment couldn't be started after the retry budget.
   CANCEL_REASON_PAYMENT_UNAVAILABLE = 5;
+  // Stock couldn't be reserved after the retry budget (Inventory unreachable); nothing was charged.
+  CANCEL_REASON_INVENTORY_UNAVAILABLE = 6;
 }
 
 // The orchestrator's internal progress (RFC-0002 §4.4); not shown to buyers.

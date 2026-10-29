@@ -292,17 +292,17 @@ States and the order status each maps to (system design §5, refined with `CREAT
 |---|---|---|---|
 | `RESERVING_STOCK` | `StockReserved` | `CREATING_PAYMENT` | Stores `reservation_expires_at` from Inventory's reply |
 | `RESERVING_STOCK` | `InsufficientStock` | `CANCELLED` | `reason=INSUFFICIENT_STOCK`; nothing to compensate |
-| `RESERVING_STOCK` | retries exhausted | `CANCELLING` | Release is a no-op if nothing was reserved |
+| `RESERVING_STOCK` | retries exhausted | `CANCELLING` | `reason=INVENTORY_UNAVAILABLE`; release only (no intent can exist), a no-op if nothing was reserved |
 | `CREATING_PAYMENT` | `IntentCreated` | `AWAITING_PAYMENT` | Stores `payment_url`; `payment_deadline = min(reservation_expires_at − 2m, intent expires_at)`, absolute times from the replies, so a slow step can't push the deadline past the reservation |
-| `CREATING_PAYMENT` | retries exhausted | `CANCELLING` | `reason=PAYMENT_UNAVAILABLE` |
+| `CREATING_PAYMENT` | retries exhausted | `CANCELLING` | `reason=PAYMENT_UNAVAILABLE`. Void anyway: the intent may exist though its reply was lost |
 | `CREATING_PAYMENT` | `payment.succeeded` † | `COMMITTING_STOCK` | The buyer paid before the intent's reply was recorded |
 | `AWAITING_PAYMENT` | `payment.succeeded` | `COMMITTING_STOCK` | |
 | `AWAITING_PAYMENT` | `payment.failed` | `CANCELLING` | `reason=PAYMENT_FAILED` |
 | `AWAITING_PAYMENT` | `PaymentDeadlinePassed` | `CANCELLING` | `reason=PAYMENT_TIMEOUT`; void first |
-| `AWAITING_PAYMENT` | `inventory.reservation.expired` † | `CANCELLING` | Should not happen (deadline 8m < TTL 10m); handled anyway |
+| `AWAITING_PAYMENT` | `inventory.reservation.expired` † | `CANCELLING` | `reason=STOCK_UNAVAILABLE`. Should not happen (deadline 8m < TTL 10m); handled anyway |
 | `COMMITTING_STOCK` | `StockCommitted` | `COMPLETED` | |
 | `COMMITTING_STOCK` | `ReservationNotFound` | `REFUNDING` | `reason=STOCK_UNAVAILABLE` (system design §5, third flow) |
-| `COMMITTING_STOCK` | retries exhausted | `REFUNDING` | Money must not stay taken for an unconfirmed order |
+| `COMMITTING_STOCK` | retries exhausted | `NEEDS_ATTENTION` | The commit may have taken effect with its reply lost, and Inventory refuses to release a committed reservation, so refunding could sell stock for a cancelled order. Commit is retried on the compensation budget, because its answer becomes definitive (committed, or `RESERVATION_NOT_FOUND` past `expires_at`); giving up leaves the order `PAID` for an operator |
 | `CANCELLING` | `IntentVoided` | `CANCELLING` | Then release |
 | `CANCELLING` | `AlreadyCaptured` † | `COMMITTING_STOCK` | The buyer paid as the deadline passed. Void runs before release, so the reservation is normally still held: try to commit it. If it expired, `ReservationNotFound` takes the existing route to `REFUNDING`. No reservation state needs remembering. |
 | `CANCELLING` | `ReservationReleased` | `CANCELLED` | |
@@ -366,7 +366,7 @@ sequenceDiagram
 | Failure | Detection | Behaviour | Recovery |
 |---|---|---|---|
 | Order killed mid-step | Process exits | The step's command is persisted; Inventory and Payment calls are idempotent | On restart the runner picks every due saga within one poll (1 s). In-flight steps finish or retry within 60 s (FR-08). Sagas awaiting payment keep waiting for their deadline. |
-| Inventory or Payment unreachable | gRPC `UNAVAILABLE` / deadline | Forward step: retry 3× with backoff (1, 2, 4 s, jittered), then cancel. Compensation: retry with backoff up to 30 s for 15 min, then `NEEDS_ATTENTION`. | Automatic, or an admin re-drives a `NEEDS_ATTENTION` saga (`ResumeSaga`, Core complete) |
+| Inventory or Payment unreachable | gRPC `UNAVAILABLE` / deadline | Forward step: retry 3× with backoff (1, 2, 4 s, jittered), then cancel. Compensation, and `CommitReservation` (paid, so its outcome must become definitive): retry with backoff up to 30 s for 15 min, then `NEEDS_ATTENTION`. | Automatic, or an admin re-drives a `NEEDS_ATTENTION` saga (`ResumeSaga`, Core complete) |
 | Payment webhook lost | Intent past `expires_at` still `REQUIRES_ACTION` | Payment reconciles with the provider | Recorded as captured or failed, event published |
 | Webhook delivered 3× | `provider_event_id` already present | Applied once; later deliveries answer `200` | — (FR-07, chaos C2) |
 | Event delivered twice to Order | `processed_events` hit | Ignored | — |
@@ -539,3 +539,5 @@ Nothing in Stage 1's services changes behaviour, except Inventory's saga RPCs st
 | 2026-10-26 | Shipping-address retention deferred to Core complete | Decided with real auth and buyer accounts |
 | 2026-10-26 | Accepted | Self-review by the author; rollout §10 became issues #57–#66 in the Checkout saga milestone |
 | 2026-10-26 | Revised after automated review (7 findings, all accepted) | CodeRabbit reviewed after acceptance. The changes: **a claim lease** (`claimed_until`, 30 s, also taken by inline steps), so no two runners execute one step concurrently. The **idempotency lookup before cart and price checks**, with the hash over the client's body, so a retry after a lost `202` replays the order. The **payment deadline anchored to the reservation and intent expiries**, not to when Order recorded the intent. **`order.cancelled` published once** per order. **Inline calls capped by the remaining inline budget.** **`AlreadyCaptured` always tries to commit**, with `ReservationNotFound` routing to the refund. System design's SSE step labelled as the Events-stage target. |
+| 2026-10-29 | Cancel reason `INVENTORY_UNAVAILABLE` added (additive) | `RESERVING_STOCK` exhausting its retries had no fitting reason; it is the twin of `PAYMENT_UNAVAILABLE`. The table now names the reason on every row that cancels or refunds. Found while implementing #59 |
+| 2026-10-29 | A commit that exhausts its retries goes to `NEEDS_ATTENTION`, not `REFUNDING` | From automated review of #59, reproduced by the property test once its model of Inventory refused to release a committed reservation. The commit may have taken effect with its reply lost; refunding then sells stock for a cancelled order and the release fails. Commit is idempotent and definitive, so it is retried on the compensation budget instead |
