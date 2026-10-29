@@ -248,6 +248,10 @@ beforeAll(async () => {
   // Generous for everything not about the stock deadline: CI runners are busy, and a missed 150 ms budget would
   // turn these tests' stock into UNKNOWN. The two deadline tests below run their own instance at the default.
   gw = await start({ GATEWAY_STOCK_DEADLINE_MS: '2000' });
+  // Warm up: the first request through a fresh gateway pays for the first connection and JIT, which on a busy CI
+  // runner outran Catalog's 1 s read deadline (2.3 s, a 503). Tests are about behaviour, not cold starts.
+  // beforeEach resets the fakes' recorded calls, so this request leaves nothing behind.
+  await request(gw).get('/v1/categories');
 });
 
 afterAll(async () => {
