@@ -25,6 +25,7 @@ target/
 build/
 .gradle/
 *.class
+.jqwik-database
 
 # Test and load-test output
 playwright-report/

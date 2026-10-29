@@ -1,0 +1,7 @@
+spring:
+  flyway:
+    enabled: ${ORDER_MIGRATE_ON_START:false}
+  grpc:
+    server:
+      reflection:
+        enabled: false

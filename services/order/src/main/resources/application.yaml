@@ -1,0 +1,81 @@
+# Every setting comes from an environment variable (conventions §10). OrderProperties validates them at startup.
+order:
+  env: ${ORDER_ENV:}
+  version: ${ORDER_VERSION:@project.version@}
+  db:
+    url: ${ORDER_DB_URL:}
+    user: ${ORDER_DB_USER:}
+    password: ${ORDER_DB_PASSWORD:}
+
+spring:
+  application:
+    name: order
+  # ORDER_ENV doubles as the profile, so application-prod.yaml holds the production defaults.
+  profiles:
+    active: ${ORDER_ENV:}
+  # Migrations run on start in local and test, and as a separate step in deployments (conventions §9).
+  flyway:
+    enabled: ${ORDER_MIGRATE_ON_START:true}
+  main:
+    banner-mode: off
+  grpc:
+    server:
+      port: ${ORDER_GRPC_PORT:9140}
+      reflection:
+        enabled: true
+      shutdown:
+        grace-period: ${ORDER_SHUTDOWN_TIMEOUT:15s}
+  lifecycle:
+    timeout-per-shutdown-phase: ${ORDER_SHUTDOWN_TIMEOUT:15s}
+
+server:
+  port: ${ORDER_HTTP_PORT:8140}
+  shutdown: graceful
+
+logging:
+  level:
+    root: ${ORDER_LOG_LEVEL:info}
+  structured:
+    format:
+      console: dev.sagamart.order.logging.OrderLogFormatter
+
+management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health,prometheus
+      path-mapping:
+        prometheus: metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+          additional-path: server:/healthz
+        readiness:
+          include: readinessState,db
+          additional-path: server:/readyz
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        grpc.server: true
+  tracing:
+    sampling:
+      probability: 1.0
+  opentelemetry:
+    resource-attributes:
+      deployment.environment: ${ORDER_ENV:}
+      service.version: ${order.version}
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+          transport: grpc
+  # Logs go to stdout as JSON (conventions §7); the collector does not take them over OTLP.
+  logging:
+    export:
+      enabled: false
