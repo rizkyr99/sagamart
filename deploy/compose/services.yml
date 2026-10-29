@@ -46,6 +46,27 @@ services:
       dynamodb: { condition: service_healthy }
       otel-collector: { condition: service_started }
 
+  order:
+    profiles: [services]
+    build:
+      context: ../..
+      dockerfile: services/order/Dockerfile
+    restart: unless-stopped
+    environment:
+      ORDER_ENV: local
+      ORDER_VERSION: ${SAGAMART_VERSION:-dev}
+      ORDER_DB_URL: jdbc:postgresql://order-db:5432/order
+      ORDER_DB_USER: ${ORDER_DB_USER}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    # Loopback only: OrderService is for the gateway, and has no identity checks until RFC-0002 step 7.
+    ports:
+      - "127.0.0.1:${ORDER_HTTP_PORT:-8140}:8140"
+      - "127.0.0.1:${ORDER_GRPC_PORT:-9140}:9140"
+    depends_on:
+      order-db: { condition: service_healthy }
+      otel-collector: { condition: service_started }
+
   gateway:
     profiles: [services]
     build:

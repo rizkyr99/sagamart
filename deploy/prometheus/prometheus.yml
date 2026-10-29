@@ -21,6 +21,10 @@ scrape_configs:
     static_configs:
       - targets: ["catalog:8120"]
 
+  - job_name: order
+    static_configs:
+      - targets: ["order:8140"]
+
   - job_name: gateway
     static_configs:
       - targets: ["gateway:8100"]
