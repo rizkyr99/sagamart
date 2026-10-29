@@ -315,11 +315,11 @@ describe('GET /v1/products', () => {
     const defaults = await start();
     catalog.page = [summary(1, ['A-1'])];
     inventory.available = { 'A-1': 10 };
-    inventory.delayMs = 2000;
+    inventory.delayMs = 5000;
     const started = Date.now();
     const res = await request(defaults).get('/v1/products').expect(200);
-    // Well before Inventory's 2 s answer: the page didn't wait for it.
-    expect(Date.now() - started).toBeLessThan(1500);
+    // Well before Inventory's 5 s answer: the page didn't wait for it (with room for a busy CI runner).
+    expect(Date.now() - started).toBeLessThan(2500);
     conforms('GET', '/v1/products', res);
     expect((res.body as { items: { stockStatus: string }[] }).items[0]?.stockStatus).toBe('UNKNOWN');
   });

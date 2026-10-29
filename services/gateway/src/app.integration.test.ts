@@ -38,9 +38,13 @@ function stubHandler(req: IncomingMessage, res: ServerResponse): void {
     res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
   };
   if (url.pathname === '/slow') {
-    setTimeout(() => {
+    // Far beyond any deadline the tests set, so "gave up early" is unmistakable even on a busy CI runner.
+    const late = setTimeout(() => {
       reply(200, { late: true });
-    }, 500);
+    }, 5000);
+    res.on('close', () => {
+      clearTimeout(late);
+    });
     return;
   }
   try {
@@ -236,7 +240,8 @@ describe('internal calls', () => {
   it('give up at their deadline with 503 and Retry-After', async () => {
     const started = Date.now();
     const res = await request(gw).get('/v1/test/slow').query({ ms: 100 }).expect(503);
-    expect(Date.now() - started).toBeLessThan(450);
+    // Catalog answers after 5 s; the 100 ms deadline must cut that short. The bound leaves room for a slow runner.
+    expect(Date.now() - started).toBeLessThan(2500);
     expect(res.body).toMatchObject({ code: 'DEPENDENCY_UNAVAILABLE' });
     expect(res.headers['retry-after']).toBe('1');
   });
@@ -293,7 +298,8 @@ describe('rate limiting', () => {
     for (let i = 0; i < 3; i++) {
       const started = Date.now();
       await request(open).get('/v1/test/whoami').expect(200);
-      expect(Date.now() - started).toBeLessThan(200);
+      // Not waiting on reconnects: hanging would run to the 5 s request deadline.
+      expect(Date.now() - started).toBeLessThan(1000);
     }
   });
 
@@ -305,14 +311,15 @@ describe('rate limiting', () => {
       .expect(200);
     const admin2 = new Redis(redis.getConnectionUrl());
     try {
-      await admin2.call('CLIENT', 'PAUSE', '1000', 'ALL'); // Redis stops answering other clients for a second
+      await admin2.call('CLIENT', 'PAUSE', '4000', 'ALL'); // Redis stops answering other clients for 4 s
       const started = Date.now();
       // The bucket is empty, but Redis can't say so in time: the request goes through.
       await request(slowRedis)
         .get('/v1/test/admin')
         .set('authorization', await bearer('admin', '0199f2e0-0000-7000-8000-000000000888'))
         .expect(200);
-      expect(Date.now() - started).toBeLessThan(300);
+      // Well before Redis answers again: the limiter gave up at its 50 ms deadline instead of waiting.
+      expect(Date.now() - started).toBeLessThan(2000);
     } finally {
       await admin2.call('CLIENT', 'UNPAUSE');
       admin2.disconnect();
