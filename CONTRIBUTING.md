@@ -55,6 +55,7 @@ Run `make identity-keys` once: it writes the local Ed25519 key pair the gateway 
 | Jaeger UI | 16686 |
 | Grafana | 3001 |
 | Inventory — HTTP (probes, metrics) / gRPC | 8110 / 9110 |
+| Order — HTTP (probes, metrics) / gRPC | 8140 / 9140 |
 | Catalog — internal API, probes, metrics | 8120 |
 | Gateway — public API (from #30) | 8100 |
 

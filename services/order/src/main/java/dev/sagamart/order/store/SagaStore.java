@@ -5,6 +5,7 @@ import dev.sagamart.order.saga.CancelReason;
 import dev.sagamart.order.saga.OrderEvent;
 import dev.sagamart.order.saga.OrderEvent.OrderCancelled;
 import dev.sagamart.order.saga.Saga;
+import dev.sagamart.order.saga.SagaCommand;
 import dev.sagamart.order.saga.SagaEvent;
 import dev.sagamart.order.saga.SagaEvent.PaymentFailed;
 import dev.sagamart.order.saga.SagaEvent.PaymentSucceeded;
@@ -19,6 +20,7 @@ import dev.sagamart.order.store.ApplyResult.NotFound;
 import dev.sagamart.order.store.ApplyResult.Stale;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -45,6 +47,37 @@ public class SagaStore {
 
   /** A saga as stored; {@code version} is what a command's result must match to apply. */
   public record StoredSaga(UUID orderId, SagaState state, int version) {}
+
+  /**
+   * A saga the runner leased. {@code attempt} counts the failed tries of {@code command} so far;
+   * {@code now} is the database's clock, for the retry budget.
+   */
+  public record Claim(
+      UUID orderId,
+      SagaCommand command,
+      int version,
+      int attempt,
+      Instant pendingSince,
+      Instant now) {}
+
+  /** One try of a command, for history (FR-12). {@code error} is null when it succeeded. */
+  public record CommandStep(
+      String name, int attempt, Outcome outcome, String error, String detail) {
+
+    public enum Outcome {
+      OK,
+      RETRYABLE_ERROR,
+      FAILED
+    }
+  }
+
+  /** What a saga's calls send about the order. {@code cancelReason} is null unless cancelled. */
+  public record StepInput(
+      UUID orderId,
+      List<NewOrder.Line> lines,
+      long total,
+      String currency,
+      CancelReason cancelReason) {}
 
   private final JdbcClient jdbc;
   private final TransactionTemplate tx;
@@ -86,10 +119,11 @@ public class SagaStore {
           jdbc.sql(
                   """
                   INSERT INTO sagas (order_id, state, state_detail, reservation_expires_at,
-                      payment_deadline, cancel_published, pending_command, next_attempt_at)
+                      payment_deadline, cancel_published, pending_command, next_attempt_at,
+                      pending_since)
                   VALUES (:id, :state, CAST(:detail AS jsonb), :reservation, :deadline,
                       :cancelPublished, CAST(:command AS jsonb),
-                      CASE WHEN :hasCommand THEN now() END)""")
+                      CASE WHEN :hasCommand THEN now() END, CASE WHEN :hasCommand THEN now() END)""")
               .params(sagaColumns(order.id(), initial))
               .update();
           step(order.id(), "TRANSITION", "OrderCreated", null, initial.stage(), null);
@@ -109,7 +143,7 @@ public class SagaStore {
 
   /** Applies a consumed event (RFC-0002 §4.7.6): whatever the saga's version is now. */
   public ApplyResult apply(UUID orderId, SagaEvent event) {
-    return apply(orderId, event, OptionalInt.empty());
+    return apply(orderId, event, OptionalInt.empty(), null);
   }
 
   /**
@@ -117,10 +151,100 @@ public class SagaStore {
    * expectedVersion} (RFC-0002 §4.7.3): then it's discarded as {@link Stale}.
    */
   public ApplyResult applyIfVersion(UUID orderId, SagaEvent event, int expectedVersion) {
-    return apply(orderId, event, OptionalInt.of(expectedVersion));
+    return apply(orderId, event, OptionalInt.of(expectedVersion), null);
   }
 
-  private ApplyResult apply(UUID orderId, SagaEvent event, OptionalInt expectedVersion) {
+  /**
+   * A call the runner made, and what came of it: {@code call} goes in history before the result is
+   * applied, in the same transaction, at the version the call was made for.
+   */
+  public ApplyResult applyResult(UUID orderId, int version, CommandStep call, SagaEvent result) {
+    return apply(orderId, result, OptionalInt.of(version), call);
+  }
+
+  /**
+   * Claims up to {@code limit} sagas whose pending command is due and not leased, and leases them
+   * for {@code lease} (RFC-0002 §4.7). Concurrent claimers skip each other's rows.
+   */
+  public List<Claim> claimDue(int limit, Duration lease) {
+    return jdbc.sql(
+            """
+            UPDATE sagas s SET claimed_until = now() + make_interval(secs => :lease)
+            FROM (
+                SELECT order_id FROM sagas
+                WHERE pending_command IS NOT NULL AND next_attempt_at <= now()
+                    AND (claimed_until IS NULL OR claimed_until < now())
+                ORDER BY next_attempt_at
+                LIMIT :limit
+                FOR UPDATE SKIP LOCKED) due
+            WHERE s.order_id = due.order_id
+            RETURNING s.order_id, s.pending_command::text AS pending_command, s.version,
+                s.attempt, s.pending_since, now() AS now""")
+        .param("lease", lease.toMillis() / 1000.0)
+        .param("limit", limit)
+        .query(
+            (rs, _) ->
+                new Claim(
+                    rs.getObject("order_id", UUID.class),
+                    SagaColumns.toCommand(json.readTree(rs.getString("pending_command"))),
+                    rs.getInt("version"),
+                    rs.getInt("attempt"),
+                    instant(rs, "pending_since"),
+                    instant(rs, "now")))
+        .list();
+  }
+
+  /**
+   * The call failed and will be retried after {@code backoff}: recorded in history, the attempt
+   * counted, the lease ended. Nothing changes if the saga moved on since {@code version}.
+   */
+  public void retryLater(UUID orderId, int version, CommandStep call, Duration backoff) {
+    tx.executeWithoutResult(
+        _ -> {
+          Optional<Stage> stage =
+              jdbc.sql(
+                      """
+                      SELECT state FROM sagas WHERE order_id = :id AND version = :version
+                      FOR UPDATE""")
+                  .param("id", orderId)
+                  .param("version", version)
+                  .query((rs, _) -> Stage.valueOf(rs.getString("state")))
+                  .optional();
+          if (stage.isEmpty()) {
+            return;
+          }
+          command(orderId, stage.get(), call);
+          jdbc.sql(
+                  """
+                  UPDATE sagas SET attempt = attempt + 1,
+                      next_attempt_at = now() + make_interval(secs => :backoff),
+                      claimed_until = NULL, updated_at = now()
+                  WHERE order_id = :id""")
+              .param("id", orderId)
+              .param("backoff", backoff.toMillis() / 1000.0)
+              .update();
+        });
+  }
+
+  /** What the calls of an order's saga send: its lines, total and, once cancelled, the reason. */
+  public StepInput stepInput(UUID orderId) {
+    return jdbc.sql("SELECT total_amount, currency, cancel_reason FROM orders WHERE id = :id")
+        .param("id", orderId)
+        .query(
+            (rs, _) -> {
+              String reason = rs.getString("cancel_reason");
+              return new StepInput(
+                  orderId,
+                  lines(orderId),
+                  rs.getLong("total_amount"),
+                  rs.getString("currency"),
+                  reason == null ? null : CancelReason.valueOf(reason));
+            })
+        .single();
+  }
+
+  private ApplyResult apply(
+      UUID orderId, SagaEvent event, OptionalInt expectedVersion, CommandStep call) {
     return tx.execute(
         _ -> {
           Optional<Locked> found =
@@ -143,6 +267,9 @@ public class SagaStore {
           }
           Locked saga = found.get();
           Stage stage = saga.state().stage();
+          if (call != null) {
+            command(orderId, stage, call);
+          }
 
           if (expectedVersion.isPresent() && expectedVersion.getAsInt() != saga.version()) {
             ObjectNode detail =
@@ -179,6 +306,7 @@ public class SagaStore {
                       cancel_published = :cancelPublished,
                       pending_command = CAST(:command AS jsonb), attempt = 0,
                       next_attempt_at = CASE WHEN :hasCommand THEN now() END,
+                      pending_since = CASE WHEN :hasCommand THEN now() END,
                       claimed_until = NULL, version = version + 1, updated_at = now()
                   WHERE order_id = :id""")
               .params(sagaColumns(orderId, t.to()))
@@ -234,6 +362,28 @@ public class SagaStore {
         .param("name", name)
         .param("from", from == null ? null : from.name())
         .param("to", to.name())
+        .param("detail", detail == null ? null : json.writeValueAsString(detail))
+        .update();
+  }
+
+  /** Records a try of the pending command; {@code stage} is where the saga was when it was made. */
+  private void command(UUID orderId, Stage stage, CommandStep call) {
+    ObjectNode detail = null;
+    if (call.error() != null) {
+      detail = json.createObjectNode().put("code", call.error()).put("message", call.detail());
+    }
+    jdbc.sql(
+            """
+            INSERT INTO saga_steps (order_id, seq, kind, name, from_state, to_state, attempt,
+                outcome, detail)
+            SELECT :id, COALESCE(MAX(seq), 0) + 1, 'COMMAND', :name, :stage, :stage, :attempt,
+                :outcome, CAST(:detail AS jsonb)
+            FROM saga_steps WHERE order_id = :id""")
+        .param("id", orderId)
+        .param("name", call.name())
+        .param("stage", stage.name())
+        .param("attempt", call.attempt())
+        .param("outcome", call.outcome().name())
         .param("detail", detail == null ? null : json.writeValueAsString(detail))
         .update();
   }

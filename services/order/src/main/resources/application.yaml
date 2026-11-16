@@ -6,6 +6,19 @@ order:
     url: ${ORDER_DB_URL:}
     user: ${ORDER_DB_USER:}
     password: ${ORDER_DB_PASSWORD:}
+  inventory:
+    addr: ${ORDER_INVENTORY_ADDR:}
+  payment:
+    addr: ${ORDER_PAYMENT_ADDR:}
+  # RFC-0002 §4.6 and §4.7.
+  saga:
+    poll-interval: ${ORDER_SAGA_POLL_INTERVAL:1s}
+    lease: ${ORDER_SAGA_LEASE:30s}
+    batch-size: ${ORDER_SAGA_BATCH_SIZE:32}
+    forward-retries: ${ORDER_SAGA_FORWARD_RETRIES:3}
+    retry-base: ${ORDER_SAGA_RETRY_BASE:1s}
+    retry-max: ${ORDER_SAGA_RETRY_MAX:30s}
+    compensation-budget: ${ORDER_SAGA_COMPENSATION_BUDGET:15m}
 
 spring:
   application:

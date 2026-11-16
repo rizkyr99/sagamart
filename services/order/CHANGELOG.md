@@ -6,6 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Added
 
+- The saga runner (#60, part 2): claims due sagas under a 30 s lease, calls Inventory and Payment with the RFC's deadlines, and applies each result at the version it was made for. Forward steps retry 3 times, compensations and the commit for 15 minutes, with doubling, jittered backoff. Every call is in the saga's history with its attempt, outcome and error.
+- `V3__saga_pending_since.sql`: when the pending command became pending, for the 15-minute budget.
+- `ORDER_INVENTORY_ADDR`, `ORDER_PAYMENT_ADDR` and the `ORDER_SAGA_*` runner settings.
 - Saga persistence (#60, part 1): `SagaStore` creates an order with its saga, and applies events to it. Each apply runs in one transaction under the saga's row lock, writing the state, its pending command, a `saga_steps` row and its `order.*` outbox events together. Command results apply only at the version they were issued for. `order.cancelled` can't go out twice.
 - `V2__saga_state_detail.sql`: `sagas.state_detail` for the state fields with no column, and a check on `sagas.state`.
 - UUIDv7 IDs (conventions §3), and contract tests that validate emitted events against `contracts/events`.

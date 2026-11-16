@@ -184,6 +184,7 @@ CREATE TABLE sagas (
     pending_command  JSONB,                           -- the next call to make, if any
     attempt          INT NOT NULL DEFAULT 0,
     next_attempt_at  TIMESTAMPTZ,                     -- when the runner should (re)try pending_command
+    pending_since    TIMESTAMPTZ,                     -- when pending_command became pending: the retry budget (#60)
     claimed_until    TIMESTAMPTZ,                     -- lease: a runner is executing pending_command until then
     reservation_expires_at TIMESTAMPTZ,               -- from ReserveStock's reply (Inventory's clock)
     payment_deadline TIMESTAMPTZ,                     -- min(reservation_expires_at - 2m, intent expires_at); §4.4
@@ -543,3 +544,5 @@ Nothing in Stage 1's services changes behaviour, except Inventory's saga RPCs st
 | 2026-10-29 | Cancel reason `INVENTORY_UNAVAILABLE` added (additive) | `RESERVING_STOCK` exhausting its retries had no fitting reason; it is the twin of `PAYMENT_UNAVAILABLE`. The table now names the reason on every row that cancels or refunds. Found while implementing #59 |
 | 2026-10-29 | A commit that exhausts its retries goes to `NEEDS_ATTENTION`, not `REFUNDING` | From automated review of #59, reproduced by the property test once its model of Inventory refused to release a committed reservation. The commit may have taken effect with its reply lost; refunding then sells stock for a cancelled order and the release fails. Commit is idempotent and definitive, so it is retried on the compensation budget instead |
 | 2026-11-16 | `sagas.state_detail` (JSONB) added in V2 | #60: `Cancelling`'s `mayHaveIntent` and `voided`, `Refunding`'s `refunded`, and the state `NEEDS_ATTENTION` is stuck in had no column, so a state couldn't be read back as written. The expiries keep their columns for the scans; `cancel_published` and the order's status, reason and payment URL are written from the state. |
+| 2026-11-16 | `sagas.pending_since` added in V3 | #60 part 2: the 15-minute budget of a compensation (and `CommitReservation`) needs to know when the command became pending; `updated_at` moves with every retry. Each command has its own budget: a compensation that moves on to its next step starts again. |
+| 2026-11-16 | Answers and give-ups for domain errors | #60 part 2. `INTENT_NOT_FOUND` on void and `RESERVATION_NOT_FOUND` on release mean there was nothing to undo, so they count as done. An error repeating can't fix (a bad request, a refused identity, `RESERVATION_COMMITTED`, `NOT_CAPTURED`) gives up at once: a forward step cancels, a compensation goes to `NEEDS_ATTENTION`. An `ErrorInfo` reason is only trusted from the domain of the service called. |

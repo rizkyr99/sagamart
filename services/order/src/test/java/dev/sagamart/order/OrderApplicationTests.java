@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.grpc.client.GrpcChannelFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -55,6 +56,9 @@ class OrderApplicationTests {
     registry.add("order.db.user", POSTGRES::getUsername);
     registry.add("order.db.password", POSTGRES::getPassword);
     registry.add("spring.grpc.server.port", () -> GRPC_PORT);
+    // Nothing is due in these tests; the runner's channels only need a valid target.
+    registry.add("order.inventory.addr", () -> "localhost:" + GRPC_PORT);
+    registry.add("order.payment.addr", () -> "localhost:" + GRPC_PORT);
   }
 
   @BeforeAll
@@ -70,9 +74,11 @@ class OrderApplicationTests {
   @LocalServerPort int httpPort;
 
   private final JdbcTemplate jdbc;
+  private final GrpcChannelFactory channels;
 
-  OrderApplicationTests(JdbcTemplate jdbc) {
+  OrderApplicationTests(JdbcTemplate jdbc, GrpcChannelFactory channels) {
     this.jdbc = jdbc;
+    this.channels = channels;
   }
 
   @Test
@@ -145,6 +151,21 @@ class OrderApplicationTests {
     var health = HealthGrpc.newBlockingStub(channel);
     assertThat(health.check(HealthCheckRequest.getDefaultInstance()).getStatus())
         .isEqualTo(ServingStatus.SERVING);
+  }
+
+  /** The runner's channels to Inventory and Payment: plaintext, as inside the Compose network. */
+  @Test
+  void clientChannelsReachAPlaintextServerByAddress() {
+    ManagedChannel client = channels.createChannel("localhost:" + GRPC_PORT);
+    try {
+      assertThat(
+              HealthGrpc.newBlockingStub(client)
+                  .check(HealthCheckRequest.getDefaultInstance())
+                  .getStatus())
+          .isEqualTo(ServingStatus.SERVING);
+    } finally {
+      client.shutdownNow();
+    }
   }
 
   @Test
