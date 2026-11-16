@@ -2,7 +2,7 @@
 
 Java service that owns orders and runs the checkout saga: it reserves stock, takes payment and confirms or cancels, so that an order is never lost and never charged twice. Design: [RFC-0002](../../docs/rfc/0002-checkout-saga.md). Contract: [`sagamart.order.v1`](../../contracts/proto/sagamart/order/v1/order.proto).
 
-> **Status:** skeleton (#58) and the saga state machine (#59). The service starts, migrates its schema and serves health, metrics and gRPC, but every `OrderService` RPC answers `UNIMPLEMENTED`. Next: persistence and the runner (#60).
+> **Status:** skeleton (#58), the saga state machine (#59), and saga persistence (#60, part 1 of 4). The service starts, migrates its schema and serves health, metrics and gRPC, but every `OrderService` RPC answers `UNIMPLEMENTED`. Next in #60: the saga runner.
 
 ## Run it
 
@@ -61,7 +61,18 @@ Environment variables, bound to `OrderProperties` and validated at startup: a mi
 
 ## Schema
 
-[`V1__create_order_schema.sql`](src/main/resources/db/migration/V1__create_order_schema.sql) is RFC-0002 §4.3: `orders`, `order_lines`, `sagas`, `saga_steps`, `processed_events` (the inbox), `idempotency_keys` and `outbox`. Migrations are forward-only: fix forward with a new `V<n>__...sql`, never edit a merged one.
+[`V1__create_order_schema.sql`](src/main/resources/db/migration/V1__create_order_schema.sql) is RFC-0002 §4.3: `orders`, `order_lines`, `sagas`, `saga_steps`, `processed_events` (the inbox), `idempotency_keys` and `outbox`. [`V2`](src/main/resources/db/migration/V2__saga_state_detail.sql) adds `sagas.state_detail`. Migrations are forward-only: fix forward with a new `V<n>__...sql`, never edit a merged one.
+
+## Persistence
+
+[`SagaStore`](src/main/java/dev/sagamart/order/store/SagaStore.java) applies the state machine to stored sagas (RFC-0002 §4.7):
+
+- **One transaction per write.** The new state, its pending command, its `saga_steps` row and its `order.*` outbox events commit together or not at all.
+- **One writer per saga.** Applying an event locks the saga row (`FOR UPDATE`). A command's result goes through `applyIfVersion`, and a result for an older version is discarded as `Stale` and recorded in history.
+- **States read back as written.** [`SagaColumns`](src/main/java/dev/sagamart/order/store/SagaColumns.java) is the only mapping: the stage in `state`, the expiries in their own columns for the scans, and the rest in `state_detail`. `cancel_published` and the order's status, cancel reason and payment URL follow from the state. Times are kept to the microsecond, truncated.
+- **Every outcome is in history** except an event for an unknown order: applied, ignored (`{"applied": false}`) and stale (`{"discarded": "stale"}`).
+- **`order.cancelled` once.** A transition that would announce a second cancellation is refused, and nothing is written.
+- **Events match the contracts and carry no personal data.** `SagaStoreTest` validates every emitted event against `contracts/events`. The shipping address is stored, never published, and `NewOrder` prints it redacted.
 
 ## Develop
 

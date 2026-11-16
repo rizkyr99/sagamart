@@ -27,6 +27,8 @@
     <checkstyle-plugin.version>3.6.0</checkstyle-plugin.version>
     <checkstyle.version>14.3.0</checkstyle.version>
     <jqwik.version>1.10.2</jqwik.version>
+    <!-- 3.x is the line on Jackson 3 (tools.jackson), as Spring Boot 4 is. -->
+    <json-schema-validator.version>3.0.8</json-schema-validator.version>
   </properties>
 
   <dependencies>
@@ -101,6 +103,13 @@
       <groupId>net.jqwik</groupId>
       <artifactId>jqwik</artifactId>
       <version>${jqwik.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- Producers test what they emit against contracts/events (testing strategy §3). -->
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+      <version>${json-schema-validator.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

@@ -180,6 +180,7 @@ CREATE TABLE order_lines (
 CREATE TABLE sagas (
     order_id         UUID PRIMARY KEY REFERENCES orders (id),
     state            TEXT NOT NULL,
+    state_detail     JSONB NOT NULL DEFAULT '{}',     -- the state's fields without a column (#60)
     pending_command  JSONB,                           -- the next call to make, if any
     attempt          INT NOT NULL DEFAULT 0,
     next_attempt_at  TIMESTAMPTZ,                     -- when the runner should (re)try pending_command
@@ -541,3 +542,4 @@ Nothing in Stage 1's services changes behaviour, except Inventory's saga RPCs st
 | 2026-10-26 | Revised after automated review (7 findings, all accepted) | CodeRabbit reviewed after acceptance. The changes: **a claim lease** (`claimed_until`, 30 s, also taken by inline steps), so no two runners execute one step concurrently. The **idempotency lookup before cart and price checks**, with the hash over the client's body, so a retry after a lost `202` replays the order. The **payment deadline anchored to the reservation and intent expiries**, not to when Order recorded the intent. **`order.cancelled` published once** per order. **Inline calls capped by the remaining inline budget.** **`AlreadyCaptured` always tries to commit**, with `ReservationNotFound` routing to the refund. System design's SSE step labelled as the Events-stage target. |
 | 2026-10-29 | Cancel reason `INVENTORY_UNAVAILABLE` added (additive) | `RESERVING_STOCK` exhausting its retries had no fitting reason; it is the twin of `PAYMENT_UNAVAILABLE`. The table now names the reason on every row that cancels or refunds. Found while implementing #59 |
 | 2026-10-29 | A commit that exhausts its retries goes to `NEEDS_ATTENTION`, not `REFUNDING` | From automated review of #59, reproduced by the property test once its model of Inventory refused to release a committed reservation. The commit may have taken effect with its reply lost; refunding then sells stock for a cancelled order and the release fails. Commit is idempotent and definitive, so it is retried on the compensation budget instead |
+| 2026-11-16 | `sagas.state_detail` (JSONB) added in V2 | #60: `Cancelling`'s `mayHaveIntent` and `voided`, `Refunding`'s `refunded`, and the state `NEEDS_ATTENTION` is stuck in had no column, so a state couldn't be read back as written. The expiries keep their columns for the scans; `cancel_published` and the order's status, reason and payment URL are written from the state. |
