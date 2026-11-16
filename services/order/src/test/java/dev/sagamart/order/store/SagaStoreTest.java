@@ -31,6 +31,9 @@ import dev.sagamart.order.store.ApplyResult.Ignored;
 import dev.sagamart.order.store.ApplyResult.NotFound;
 import dev.sagamart.order.store.ApplyResult.Stale;
 import dev.sagamart.order.store.NewOrder.Line;
+import dev.sagamart.order.store.SagaStore.Claim;
+import dev.sagamart.order.store.SagaStore.CommandStep;
+import dev.sagamart.order.store.SagaStore.CommandStep.Outcome;
 import dev.sagamart.order.store.SagaStore.StoredSaga;
 import java.time.Duration;
 import java.time.Instant;
@@ -437,7 +440,90 @@ class SagaStoreTest {
         .isEqualTo(new Cancelled(CancelReason.INSUFFICIENT_STOCK));
   }
 
+  // ---- Claims (RFC-0002 §4.7) ----
+
+  @Test
+  void aDueSagaIsClaimedOnceUntilItsLeaseEnds() {
+    UUID id = created();
+
+    assertThat(claimed(store.claimDue(1_000, Duration.ofSeconds(30)))).contains(id);
+    assertThat(claimed(store.claimDue(1_000, Duration.ofSeconds(30))))
+        .as("leased: no second claim")
+        .doesNotContain(id);
+
+    // The holder crashed: its lease runs out, and the saga is due again.
+    jdbc.sql("UPDATE sagas SET claimed_until = now() - interval '1 second' WHERE order_id = :id")
+        .param("id", id)
+        .update();
+    assertThat(store.claimDue(1_000, Duration.ofSeconds(30)))
+        .filteredOn(c -> c.orderId().equals(id))
+        .singleElement()
+        .satisfies(
+            c -> {
+              assertThat(c.command()).isEqualTo(new ReservingStock().pendingCommand().get());
+              assertThat(c.version()).isEqualTo(1);
+              assertThat(c.attempt()).isZero();
+              assertThat(c.pendingSince()).isBeforeOrEqualTo(c.now());
+            });
+  }
+
+  @Test
+  void aSagaWaitingForAnEventIsNeverClaimed() {
+    UUID id = created();
+    drive(
+        id,
+        new StockReserved(RESERVATION_EXPIRES),
+        new IntentCreated(PAYMENT_URL, RESERVATION_EXPIRES));
+
+    assertThat(claimed(store.claimDue(1_000, Duration.ofSeconds(30)))).doesNotContain(id);
+  }
+
+  @Test
+  void aRetryForAnOlderVersionChangesNothing() {
+    UUID id = created();
+    drive(id, new StockReserved(RESERVATION_EXPIRES));
+    List<String> history = steps(id);
+
+    store.retryLater(
+        id,
+        1,
+        new CommandStep("ReserveStock", 1, Outcome.RETRYABLE_ERROR, "UNAVAILABLE", ""),
+        Duration.ofSeconds(1));
+
+    assertThat(steps(id)).isEqualTo(history);
+    assertThat(
+            jdbc.sql("SELECT attempt FROM sagas WHERE order_id = :id")
+                .param("id", id)
+                .query(Integer.class)
+                .single())
+        .isZero();
+  }
+
+  @Test
+  void pendingSinceIsSetWithTheCommandAndClearedWithIt() {
+    UUID id = created();
+    assertThat(pendingSinceIsSet(id)).isTrue();
+
+    drive(
+        id,
+        new StockReserved(RESERVATION_EXPIRES),
+        new IntentCreated(PAYMENT_URL, RESERVATION_EXPIRES));
+
+    assertThat(pendingSinceIsSet(id)).as("waiting for payment: no command").isFalse();
+  }
+
   // ---- Helpers ----
+
+  static List<UUID> claimed(List<Claim> claims) {
+    return claims.stream().map(Claim::orderId).toList();
+  }
+
+  static boolean pendingSinceIsSet(UUID id) {
+    return jdbc.sql("SELECT pending_since IS NOT NULL FROM sagas WHERE order_id = :id")
+        .param("id", id)
+        .query(Boolean.class)
+        .single();
+  }
 
   static UUID created() {
     UUID id = UUID.randomUUID();

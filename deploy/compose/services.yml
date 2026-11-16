@@ -58,6 +58,9 @@ services:
       ORDER_DB_URL: jdbc:postgresql://order-db:5432/order
       ORDER_DB_USER: ${ORDER_DB_USER}
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD}
+      ORDER_INVENTORY_ADDR: inventory:9110
+      # Payment arrives with #62: until then a saga retries CreatePaymentIntent, then cancels.
+      ORDER_PAYMENT_ADDR: payment:9150
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     # Loopback only: OrderService is for the gateway, and has no identity checks until RFC-0002 step 7.
     ports:

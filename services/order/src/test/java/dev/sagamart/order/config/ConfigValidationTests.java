@@ -32,7 +32,9 @@ class ConfigValidationTests {
           "order.env", "test",
           "order.db.url", "jdbc:postgresql://localhost:1/order",
           "order.db.user", "order",
-          "order.db.password", "order");
+          "order.db.password", "order",
+          "order.inventory.addr", "localhost:1",
+          "order.payment.addr", "localhost:2");
 
   static Stream<Arguments> invalid() {
     return Stream.of(
@@ -41,7 +43,9 @@ class ConfigValidationTests {
         Arguments.of("order.env", "PROD", "order.env"),
         Arguments.of("order.db.url", "", "order.db.url"),
         Arguments.of("order.db.user", "", "order.db.user"),
-        Arguments.of("order.db.password", "", "order.db.password"));
+        Arguments.of("order.db.password", "", "order.db.password"),
+        Arguments.of("order.inventory.addr", "", "order.inventory.addr"),
+        Arguments.of("order.payment.addr", "", "order.payment.addr"));
   }
 
   @ParameterizedTest(name = "{0}=\"{1}\"")

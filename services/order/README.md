@@ -2,7 +2,7 @@
 
 Java service that owns orders and runs the checkout saga: it reserves stock, takes payment and confirms or cancels, so that an order is never lost and never charged twice. Design: [RFC-0002](../../docs/rfc/0002-checkout-saga.md). Contract: [`sagamart.order.v1`](../../contracts/proto/sagamart/order/v1/order.proto).
 
-> **Status:** skeleton (#58), the saga state machine (#59), and saga persistence (#60, part 1 of 4). The service starts, migrates its schema and serves health, metrics and gRPC, but every `OrderService` RPC answers `UNIMPLEMENTED`. Next in #60: the saga runner.
+> **Status:** skeleton (#58), the saga state machine (#59), saga persistence and the saga runner (#60, parts 1 and 2 of 4). The runner drives any stored saga through Inventory and Payment, but nothing creates orders yet: every `OrderService` RPC answers `UNIMPLEMENTED`. Next in #60: `CreateOrder` and the payment-deadline scan.
 
 ## Run it
 
@@ -40,6 +40,9 @@ Environment variables, bound to `OrderProperties` and validated at startup: a mi
 | `ORDER_VERSION` | defaults to the pom version; shown in every log line and in traces |
 | `ORDER_MIGRATE_ON_START` | defaults to `true`, and to `false` in prod, where migrations are a deployment step (conventions §9) |
 | `ORDER_HTTP_PORT`, `ORDER_GRPC_PORT` | default `8140` and `9140` |
+| `ORDER_INVENTORY_ADDR`, `ORDER_PAYMENT_ADDR` | `host:port` of Inventory's and Payment's gRPC (plaintext in Compose: `inventory:9110`, `payment:9150`) |
+| `ORDER_SAGA_POLL_INTERVAL`, `ORDER_SAGA_LEASE`, `ORDER_SAGA_BATCH_SIZE` | the runner: default `1s`, `30s` and `32` (RFC-0002 §4.7) |
+| `ORDER_SAGA_FORWARD_RETRIES`, `ORDER_SAGA_RETRY_BASE`, `ORDER_SAGA_RETRY_MAX`, `ORDER_SAGA_COMPENSATION_BUDGET` | retries: default `3`, `1s`, `30s` and `15m` (RFC-0002 §4.6) |
 | `ORDER_LOG_LEVEL`, `ORDER_SHUTDOWN_TIMEOUT` | default `info` and `15s` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP over gRPC, default `http://localhost:4317` |
 
@@ -47,7 +50,7 @@ Environment variables, bound to `OrderProperties` and validated at startup: a mi
 
 - **Logs:** one JSON object per line with the conventions §7 fields (`ts`, `level`, `service`, `env`, `version`, `msg`, `trace_id`, `span_id`), written by `OrderLogFormatter`. Add domain IDs as fields with SLF4J's fluent API: `log.atInfo().addKeyValue("order_id", id).log("order confirmed")`.
 - **Traces:** every gRPC call and HTTP request is a span, exported over OTLP. Probes and scrapes (`/healthz`, `/readyz`, `/metrics`) are not observed, so they neither bury real traces nor skew request metrics.
-- **Metrics:** Prometheus at `/metrics`: `grpc_server_*` and `http_server_requests_seconds` histograms, JVM, and the `hikaricp_*` pool. The saga metrics (RFC-0002 §6) arrive with the saga.
+- **Metrics:** Prometheus at `/metrics`: `grpc_server_*` and `http_server_requests_seconds` histograms, JVM, and the `hikaricp_*` pool. The runner adds `sagamart_order_saga_step_duration_seconds{step,outcome}` and `sagamart_order_saga_transitions_total{from,to}`; the remaining saga metrics (RFC-0002 §6) come with the scan and the queries.
 
 ## The saga state machine
 
@@ -72,7 +75,23 @@ Environment variables, bound to `OrderProperties` and validated at startup: a mi
 - **States read back as written.** [`SagaColumns`](src/main/java/dev/sagamart/order/store/SagaColumns.java) is the only mapping: the stage in `state`, the expiries in their own columns for the scans, and the rest in `state_detail`. `cancel_published` and the order's status, cancel reason and payment URL follow from the state. Times are kept to the microsecond, truncated.
 - **Every outcome is in history** except an event for an unknown order: applied, ignored (`{"applied": false}`) and stale (`{"discarded": "stale"}`).
 - **`order.cancelled` once.** A transition that would announce a second cancellation is refused, and nothing is written.
+- **Every call is in history** (`kind = COMMAND`): its attempt, outcome (`OK`, `RETRYABLE_ERROR`, `FAILED`) and the error's code, written in the same transaction as its result.
 - **Events match the contracts and carry no personal data.** `SagaStoreTest` validates every emitted event against `contracts/events`. The shipping address is stored, never published, and `NewOrder` prints it redacted.
+
+## The runner
+
+[`SagaRunner`](src/main/java/dev/sagamart/order/runner/SagaRunner.java) makes the calls (RFC-0002 §4.6, §4.7). Every second it:
+
+1. **Claims** up to 32 due sagas (`FOR UPDATE SKIP LOCKED`) and leases them for 30 s, longer than any call's deadline. A crashed runner's lease runs out and the saga is due again.
+2. **Calls** Inventory or Payment for each, concurrently, with the RFC's deadlines (2 s Inventory, 3 s Payment, 5 s refunds). [`GrpcStepExecutor`](src/main/java/dev/sagamart/order/runner/GrpcStepExecutor.java) turns the answer into a saga event. A domain error the saga has a row for is an answer: `INSUFFICIENT_STOCK`, `RESERVATION_NOT_FOUND`, `ALREADY_CAPTURED`; nothing to void or release counts as done.
+3. **Applies** the result at the version the call was made for; a saga that moved on meanwhile discards it.
+
+Failures follow [`RetryPolicy`](src/main/java/dev/sagamart/order/runner/RetryPolicy.java):
+
+| Command | Retryable (`UNAVAILABLE`, deadline, overloaded) | Not retryable (bad request, refused identity, broken invariant) |
+|---|---|---|
+| `ReserveStock`, `CreatePaymentIntent` | 3 retries after 1, 2, 4 s (±20%), then the saga cancels | the saga cancels at once |
+| `CommitReservation`, and the compensations: `VoidPaymentIntent`, `ReleaseReservation`, `RefundPayment` | backoff doubling to 30 s, for 15 min from when the command became pending (`sagas.pending_since`), then `NEEDS_ATTENTION` | `NEEDS_ATTENTION` at once |
 
 ## Develop
 
