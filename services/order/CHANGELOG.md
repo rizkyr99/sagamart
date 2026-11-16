@@ -6,6 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Added
 
+- Saga persistence (#60, part 1): `SagaStore` creates an order with its saga, and applies events to it. Each apply runs in one transaction under the saga's row lock, writing the state, its pending command, a `saga_steps` row and its `order.*` outbox events together. Command results apply only at the version they were issued for. `order.cancelled` can't go out twice.
+- `V2__saga_state_detail.sql`: `sagas.state_detail` for the state fields with no column, and a check on `sagas.state`.
+- UUIDv7 IDs (conventions §3), and contract tests that validate emitted events against `contracts/events`.
 - The checkout saga state machine (#59, RFC-0002 §4.4): sealed states, events and commands, and `Saga.apply` as one switch. It covers the late and out-of-order rows, `AlreadyCaptured` always trying to commit, `order.cancelled` only on the first entry to `CANCELLED`, and `payment_deadline = min(reservation − 2m, intent expiry)`. Tests generated from the transition table, plus a jqwik property test over a simulated world.
 - Cancel reason `INVENTORY_UNAVAILABLE` for a reservation that exhausted its retries.
 - Service skeleton (#58): Java 25, Spring Boot 4.1 and the Maven Wrapper. It includes:
